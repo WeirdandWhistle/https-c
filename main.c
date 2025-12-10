@@ -12,12 +12,19 @@ struct TLSPlaintext{
 	uint16_t legacy_record_version; // alwasys 0x0303
 	uint16_t length;	
 };
+struct Handshake {
+	unsigned char msg_type;
+	uint32_t length; 
+};
 
 struct clientHello {
 	uint16_t legacy_version; // alwasys 0x0303
 	unsigned char random[32];
+	uint8_t legacy_session_id_length;
 	unsigned char legacy_session_id[32];
+	uint16_t cipher_suites_length;
 	unsigned char *cipher_suites; // 2^16 - 1
+	uint8_t legacy_compression_methods_length;
 	unsigned char legacy_compression_methods[255]; // 2^8 -1
 	//extensions...
 };
@@ -27,7 +34,6 @@ void getUint16(int fd, uint16_t *out){
 	*out = ((buf[0] << 8*(2-1)) | (buf[1] << 8*(2-2)));
 //	printf("from func: %x\n",*out);
 }
-
 int main(){
 
 	if(sodium_init() < 0){
@@ -73,6 +79,7 @@ int main(){
 
 	struct clientHello ch = {0};
 	struct TLSPlaintext record = {0};
+	struct Handshake hs = {0};
 
 	unsigned char lengthBuffer[2];
 
@@ -84,8 +91,23 @@ int main(){
 	printf("legacay version: %x\n",record.legacy_record_version);
 	printf("length: %x\n", record.length);
 
+	read(acc, &hs.msg_type,1);
 
+	unsigned char hsLengthBuffer[3];
+	read(acc, &hsLengthBuffer, 3);
+	hs.length = ((hsLengthBuffer[0] << 8*(3-1))|(hsLengthBuffer[1] << 8*(3-2))|(hsLengthBuffer[2] << 8*(3-3)));
 
+	printf("hs-msg type: %x\n", hs.msg_type);
+	printf("hs-length %x\n",hs.length);
+
+	read(acc, &ch.legacy_version, 2);
+	read(acc, &ch.random, 32);
+	read(acc, &ch.legacy_session_id_length, 1);
+	read(acc, &ch.legacy_session_id, ch.legacy_session_id_length);
+
+	printf("ch-legacy version: %x\n",ch.legacy_version);
+	printf("ch-random: ");for(int i = 0; i<32;i++){printf("%X ",ch.random[i]);}printf("\n");	
+	printf("ch-sessiond id: ");for(int i = 0; i<ch.legacy_session_id_length;i++){printf("%X ",ch.legacy_session_id[i]);}printf("\n");
 
 	return 0;
 }
