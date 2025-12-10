@@ -1,2 +1,2 @@
 # https-c
-https in c using openSSL crytographics libarys
+https in c using Lib-Sodium crytographics libarys
