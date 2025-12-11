@@ -16,8 +16,13 @@ struct Handshake {
 	unsigned char msg_type;
 	uint32_t length; 
 };
+struct Extension {
+	uint16_t extension_type;
+	uint16_t extension_data_length;
+	unsigned char *extension_data;
+};
 
-struct clientHello {
+struct ClientHello {
 	uint16_t legacy_version; // alwasys 0x0303
 	unsigned char random[32];
 	uint8_t legacy_session_id_length;
@@ -26,13 +31,27 @@ struct clientHello {
 	unsigned char *cipher_suites; // 2^16 - 1
 	uint8_t legacy_compression_methods_length;
 	unsigned char legacy_compression_methods[255]; // 2^8 -1
-	//extensions...
+	uint16_t extensions_length;
+	struct Extension *extensions;
+};
+struct ServerHello {
+	uint16_t legacy_version; //always 0x0303
+	unsigned char random[32];
+	uint8_t legacy_session_id_echo_length;
+	unsigned char legacy_session_id_echo[32];
+	uint16_t cipher_suite;
+	uint8_t legacy_compression_method; // this vlaue should be 0 in tls 1.3
+	uint16_t extensions_length;
+	struct Extension *extensions;
 };
 void getUint16(int fd, uint16_t *out){
 	unsigned char buf[2];
 	read(fd, &buf, 2);
 	*out = ((buf[0] << 8*(2-1)) | (buf[1] << 8*(2-2)));
 //	printf("from func: %x\n",*out);
+}
+void parseExentions(int fd, struct Extension *ex, int length){
+	
 }
 int main(){
 
@@ -41,6 +60,13 @@ int main(){
 		return 1;
 	}else{
 		printf("sodium succefuly init\n");
+	}
+
+	if(crypto_aead_aes256gcm_is_available() == 0){
+		printf("go mate with your self lib sodium\n");
+		return 1;
+	} else{
+		printf("W in chat folks. AES is supported!\n");
 	}
 
 	unsigned char out[crypto_hash_sha256_BYTES];
@@ -77,7 +103,7 @@ int main(){
 	if(acc<0){printf("accept error!"); return 1;}
 
 
-	struct clientHello ch = {0};
+	struct ClientHello ch = {0};
 	struct TLSPlaintext record = {0};
 	struct Handshake hs = {0};
 
@@ -105,9 +131,123 @@ int main(){
 	read(acc, &ch.legacy_session_id_length, 1);
 	read(acc, &ch.legacy_session_id, ch.legacy_session_id_length);
 
+	getUint16(acc, &ch.cipher_suites_length);
+	ch.cipher_suites = malloc(ch.cipher_suites_length);
+	
+	if(ch.cipher_suites == NULL){printf("seg error is becuase null!\n");}
+
+	read(acc, ch.cipher_suites, ch.cipher_suites_length);
+
+	read(acc, &ch.legacy_compression_methods_length, 1);
+	read(acc, ch.legacy_compression_methods, ch.legacy_compression_methods_length);
+
 	printf("ch-legacy version: %x\n",ch.legacy_version);
-	printf("ch-random: ");for(int i = 0; i<32;i++){printf("%X ",ch.random[i]);}printf("\n");	
+	printf("ch-random     : ");for(int i = 0; i<32;i++){printf("%X ",ch.random[i]);}printf("\n");	
 	printf("ch-sessiond id: ");for(int i = 0; i<ch.legacy_session_id_length;i++){printf("%X ",ch.legacy_session_id[i]);}printf("\n");
+	printf("ch-cipher suite length: 0x%x\n",ch.cipher_suites_length);
+
+	for(int i = 0; i<ch.cipher_suites_length/2;i+=2){
+		printf("0x%x%x, ",ch.cipher_suites[i],ch.cipher_suites[i+1]);
+		if(ch.cipher_suites[i] == 0x013 && ch.cipher_suites[i+1] == 0x01){printf(" :yay: has sha256 gmc, ");}
+	}
+	printf("\n");
+
+	printf("cu-legacy compresssio lnegth: %d\nch-legacy comperession: ",ch.legacy_compression_methods_length);
+	for(int i = 0; i<ch.legacy_compression_methods_length;i++){printf("%X ",ch.legacy_compression_methods[i]);}printf("\n");
+
+	getUint16(acc, &ch.extensions_length);
+	
+	ch.extensions = malloc(ch.extensions_length);
+
+	int readEx = 0;
+	int index = 0;
+	while(1){
+		struct Extension *ex = malloc(sizeof(struct Extension));
+		if(ex == NULL){printf("malloc failed!");return 1;}
+
+		uint16_t type, length;
+		getUint16(acc, &type);
+		getUint16(acc, &length);
+		readEx += 4;
+
+		ex->extension_data = malloc(length);
+		if(ex->extension_data == NULL){printf("malloc failed! fir extension data");}
+		read(acc, ex->extension_data, length);
+		readEx += length;
+
+		ex->extension_type = type;
+		ex->extension_data_length = length;
+
+		ch.extensions[index] = *ex;
+		index++;
+
+		if(length <= 0){printf("thats realy weaird length is les than 0 type: %x\n",type);}
+
+		printf("index: %d readEx: %d ch.ex_len: %d length: %d type: %x\n",index,readEx,ch.extensions_length,length,type);
+		if(readEx >= ch.extensions_length){break;}
+
+	}
+	ch.extensions_length = index;
+
+	for(int i = 0; i<ch.extensions_length;i++){
+		printf("type %d length 0x%x body: ",ch.extensions[i].extension_type,ch.extensions[i].extension_data_length);
+		for(int j = 0; j<ch.extensions[i].extension_data_length;j++){
+			printf("%x ",ch.extensions[i].extension_data[j]);
+		}
+		printf("\n");
+	}
+	//printf("index %d",index);
+	
+	record = {0};
+
+	record.type = 22; // handshake
+	record.legacy_record_version = 0x0303;
+	record.length = 0;
+
+	struct ServerHello sh = {0};
+	sh.legacy_version = 0x0303;
+	randombytes_buf(&sh.random, 32);
+
+	record.length += 34;
+
+	sh.legacy_session_id_echo_length = ch.legacy_session_id_length;
+	sh.legacy_session_id_echo = ch.legacy_session_id;
+
+	record.length += 1 + ch.legacy_session_id_length;
+
+	sh.cipher_suite = 0x1301; // TLS_AES_128_GCM_SHA256
+	sh.legacy_compression_method = 0; // must be ZERO 0
+	
+	record.length += 3;
+
+	int numberOfExtensions = 2;
+
+	unsigned char server_pk[crypto_kx_PUBLICKEYBYTES];
+	unsigned char server_sk[crypto_kx_SECRETKEYBYTES];
+
+	if(crypto_kx_keypair(server_pk,server_sk)!= 0){printf("a error occured when making public and private key pair\n");}
+
+	
+	sh.extensions = malloc(sizeof(struct Extension) * numberOfExtensions);
+	if(sh.extensions == NULL){printf("malloc failed! when reserving sh extensions!");}
+
+	struct Extension supported_versions = {0};
+	supported_versions.extension_type = 43;
+	supported_versions.extension_data_length = 2;
+	supported_versions.extension_data = malloc(2); 
+	supported_versions.extension_data[0] = 0x03; supported_versions.extension_data[1] = 0x04;
+	sh.extensions[0] = supported_versions;
+
+	struct Extension key_share = {0};
+	key_share.extension_type = 51;
+	
+
+
+	free(ch.cipher_suites);
+	for(int i = 0; i<ch.extensions_length;i++){
+		free(ch.extensions[i].extension_data);
+	}
+	free(ch.extensions);
 
 	return 0;
 }
