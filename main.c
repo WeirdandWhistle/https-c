@@ -51,11 +51,27 @@ void getUint16(int fd, uint16_t *out){
 	*out = ((buf[0] << 8*(2-1)) | (buf[1] << 8*(2-2)));
 //	printf("from func: %x\n",*out);
 }
+void writeUint16(int fd, uint16_t value){
+	uint16_t out = htons(value);
+	write(fd, &out, 2);
+}
+void writeUint24(int fd, uint32_t value){
+	unsigned char a[3];
+	uint32_t out = htonl(value);
+	a[0] = out>>16|0xFF;
+	a[1] = out>>8|0xFF;
+	a[2]; (out>>0)|0xFF;
+	write(fd, a, 3);
+}
 void parseExentions(int fd, struct Extension *ex, int length){
 	
 }
 int main(){
-
+	if(1){
+		uint64_t a = 0x0123456789abcdf;
+		uint32_t b = *(uint32_t*)&a;
+		printf("b is %x\n",b);	
+	}
 	if(sodium_init() < 0){
 		printf("sodium lib could not be init\n");
 		return 1;
@@ -221,8 +237,9 @@ int main(){
 						printf("we have a problem cap!\n");
 						return 1;
 					}
-					for(int k = 0; k<crypto_box_PUBLICKEYBYTES;k++){client_pk[k] = key_exchange[k];}
-					printf("clients key has been parsed and read!\n");
+					for(int k = 0; k<crypto_box_PUBLICKEYBYTES;k++){client_pk[k] = key_exchange[k];printf("%x ",client_pk[k]);}
+					printf("\nclients key has been parsed and read!\n");
+					free(key_exchange);
 					break;
 				}
 				j+=key_exchange_length;
@@ -237,6 +254,10 @@ int main(){
 	record.type = 22; // handshake
 	record.legacy_record_version = 0x0303;
 	record.length = 0;
+
+	//reset handshake
+	hs.msg_type = 2;
+	hs.length = 0;
 
 	struct ServerHello sh = {0};
 	sh.legacy_version = 0x0303;
@@ -268,25 +289,68 @@ int main(){
 
 
 	
-	sh.extensions = malloc(sizeof(struct Extension) * numberOfExtensions);
-	if(sh.extensions == NULL){printf("malloc failed! when reserving sh extensions!");}
+	//sh.extensions = malloc(sizeof(struct Extension) * numberOfExtensions);
+	//if(sh.extensions == NULL){printf("malloc failed! when reserving sh extensions!");}
+	record.length += 2; //extension prefix
+	uint16_t ex_length = 0;
 
 	struct Extension supported_versions = {0};
 	supported_versions.extension_type = 43;
 	supported_versions.extension_data_length = 2;
 	supported_versions.extension_data = malloc(2); 
-	supported_versions.extension_data[0] = 0x03; supported_versions.extension_data[1] = 0x04;
-	sh.extensions[0] = supported_versions;
+	supported_versions.extension_data[0] = 0x03; supported_versions.extension_data[1] = 0x04; // TLS 1.1
+	//sh.extensions[0] = supported_versions;
+	ex_length += 2 + 2 + 2; // type + length + payload/data
 
 	
-
+	uint16_t key_share_group = 0x001d;
 	struct Extension key_share = {0};
-	key_share.extension_type = 51;
+	key_share.extension_type = 51; ex_length += 2;
+	key_share.extension_data_length = 2 + 2 + crypto_box_PUBLICKEYBYTES; // group + vectorPrefix + vector(server_pk)
+	ex_length += 2;
 
 	uint16_t group = 0x001d; // named group for x25519
-	uint16_t key_exchange_length = crypto_kx_PUBLICKEYBYTES;
+	ex_length += 2;
+	uint16_t key_exchange_length = crypto_box_PUBLICKEYBYTES; ex_length += 2;
+	ex_length += crypto_box_PUBLICKEYBYTES; // server public key 
+
+	record.length += ex_length;
+	hs.length = record.length - 1 - 2 -2;
+
+	//record
+	write(acc,&record.type,1);
+	writeUint16(acc, record.legacy_record_version);
+	writeUint16(acc, record.length);
+	printf("record_length: %d\nhandshake_length: %d\n",record.length,hs.length);
+
+	//handshake
+	write(acc, &hs.msg_type, 1);
+	writeUint24(acc, hs.length);
+	
+	//server_hello
+	writeUint16(acc, sh.legacy_version);
+	write(acc, sh.random, 32);
+	write(acc, &sh.legacy_session_id_echo_length, 1);
+	write(acc, sh.legacy_session_id_echo, sh.legacy_session_id_echo_length);
+	writeUint16(acc,sh.cipher_suite);
+	write(acc, &sh.legacy_compression_method,1);
+
+	//extensions
+	writeUint16(acc, ex_length);
+	//supported_versions
+	writeUint16(acc, supported_versions.extension_type);
+	writeUint16(acc, supported_versions.extension_data_length);
+	write(acc, supported_versions.extension_data, 2);
+	//key_share
+	writeUint16(acc, key_share.extension_type);
+	writeUint16(acc, key_share.extension_data_length);
+	writeUint16(acc, key_share_group);
+	writeUint16(acc, key_exchange_length);
+	write(acc, server_pk, crypto_box_PUBLICKEYBYTES);
 
 
+	free(supported_versions.extension_data);
+	free(sh.extensions);
 	free(ch.cipher_suites);
 	for(int i = 0; i<ch.extensions_length;i++){
 		free(ch.extensions[i].extension_data);
