@@ -1,3 +1,4 @@
+#include <string.h>
 #include <unistd.h>
 #include <netinet/in.h>
 #include <stdlib.h>
@@ -183,12 +184,12 @@ int main(){
 
 		if(length <= 0){printf("thats realy weaird length is les than 0 type: %x\n",type);}
 
-		printf("index: %d readEx: %d ch.ex_len: %d length: %d type: %x\n",index,readEx,ch.extensions_length,length,type);
+		//printf("index: %d readEx: %d ch.ex_len: %d length: %d type: %x\n",index,readEx,ch.extensions_length,length,type);
 		if(readEx >= ch.extensions_length){break;}
 
 	}
 	ch.extensions_length = index;
-
+	/*
 	for(int i = 0; i<ch.extensions_length;i++){
 		printf("type %d length 0x%x body: ",ch.extensions[i].extension_type,ch.extensions[i].extension_data_length);
 		for(int j = 0; j<ch.extensions[i].extension_data_length;j++){
@@ -196,9 +197,42 @@ int main(){
 		}
 		printf("\n");
 	}
+	*/
 	//printf("index %d",index);
+
+	unsigned char client_pk[crypto_box_PUBLICKEYBYTES];
+	printf("----------------- start extension parsing ---------------------------\n");
+	for(int i = 0; i<index;i++){
+		if(ch.extensions[i].extension_type == 51){ // id for key_share
+			printf("key_share extension recinized!\n");
+			struct Extension key_share = ch.extensions[i];
+			unsigned char *data = key_share.extension_data;
+			for(int j = 2; j<key_share.extension_data_length;){
+				uint16_t group = ((data[j+0] << 8) | (data[j+1]<<0)); j+=2;
+				uint16_t key_exchange_length = ((data[j+0]<<8)|(data[j+1]<<0)); j+=2;
+				printf("key_share group: 0x%x key_share length: %d\n",group,key_exchange_length);
+				if(group == 0x001d){ // named_group for ECDHE X25519
+					printf("group recnoized!\n");
+					unsigned char *key_exchange = malloc(key_exchange_length); if(key_exchange == NULL){printf("malloc failed! for key_exchange\n");return 1;}
+					for(int k = 0; k<key_exchange_length;k++){
+						key_exchange[k] = data[k+j];
+					}
+					if(key_exchange_length != crypto_kx_PUBLICKEYBYTES){
+						printf("we have a problem cap!\n");
+						return 1;
+					}
+					for(int k = 0; k<crypto_box_PUBLICKEYBYTES;k++){client_pk[k] = key_exchange[k];}
+					printf("clients key has been parsed and read!\n");
+					break;
+				}
+				j+=key_exchange_length;
+
+			}
+			break;
+		}
+	}
 	
-	record = {0};
+	//record = {}; i guess just dont reset?
 
 	record.type = 22; // handshake
 	record.legacy_record_version = 0x0303;
@@ -211,7 +245,7 @@ int main(){
 	record.length += 34;
 
 	sh.legacy_session_id_echo_length = ch.legacy_session_id_length;
-	sh.legacy_session_id_echo = ch.legacy_session_id;
+	memcpy(sh.legacy_session_id_echo, ch.legacy_session_id,sizeof(ch.legacy_session_id));
 
 	record.length += 1 + ch.legacy_session_id_length;
 
@@ -222,10 +256,16 @@ int main(){
 
 	int numberOfExtensions = 2;
 
-	unsigned char server_pk[crypto_kx_PUBLICKEYBYTES];
-	unsigned char server_sk[crypto_kx_SECRETKEYBYTES];
+	unsigned char server_pk[crypto_box_PUBLICKEYBYTES];
+	unsigned char server_sk[crypto_box_SECRETKEYBYTES];
+	unsigned char sharedsecret[crypto_scalarmult_BYTES];
 
-	if(crypto_kx_keypair(server_pk,server_sk)!= 0){printf("a error occured when making public and private key pair\n");}
+	randombytes_buf(server_sk, sizeof(server_sk));
+	crypto_scalarmult_base(server_pk, server_sk);
+	if(crypto_scalarmult(sharedsecret, server_sk, client_pk)!=0){
+		printf("sharedsecret calculation did not work!\n");
+	}else{printf("shared secret calulation has worked!\n");}
+
 
 	
 	sh.extensions = malloc(sizeof(struct Extension) * numberOfExtensions);
@@ -238,9 +278,13 @@ int main(){
 	supported_versions.extension_data[0] = 0x03; supported_versions.extension_data[1] = 0x04;
 	sh.extensions[0] = supported_versions;
 
+	
+
 	struct Extension key_share = {0};
 	key_share.extension_type = 51;
-	
+
+	uint16_t group = 0x001d; // named group for x25519
+	uint16_t key_exchange_length = crypto_kx_PUBLICKEYBYTES;
 
 
 	free(ch.cipher_suites);
