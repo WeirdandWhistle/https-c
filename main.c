@@ -58,10 +58,11 @@ void writeUint16(int fd, uint16_t value){
 void writeUint24(int fd, uint32_t value){
 	unsigned char a[3];
 	uint32_t out = htonl(value);
-	a[0] = out>>16|0xFF;
-	a[1] = out>>8|0xFF;
-	a[2]; (out>>0)|0xFF;
+	a[0] = (out>>8)&0xFF;
+	a[1] = (out>>16)&0xFF;
+	a[2] = (out>>24)&0xFF;
 	write(fd, a, 3);
+	printf("uint24: %x %x %x\n",a[0],a[1],a[2]);
 }
 void parseExentions(int fd, struct Extension *ex, int length){
 	
@@ -321,7 +322,7 @@ int main(){
 	write(acc,&record.type,1);
 	writeUint16(acc, record.legacy_record_version);
 	writeUint16(acc, record.length);
-	printf("record_length: %d\nhandshake_length: %d\n",record.length,hs.length);
+	printf("record_length: %d\nhandshake_length: %d\nextension_length: %d\n",record.length,hs.length,ex_length);
 
 	//handshake
 	write(acc, &hs.msg_type, 1);
@@ -347,6 +348,10 @@ int main(){
 	writeUint16(acc, key_share_group);
 	writeUint16(acc, key_exchange_length);
 	write(acc, server_pk, crypto_box_PUBLICKEYBYTES);
+
+	printf("sleeping for 2 second...\n");
+	sleep(2);
+
 
 
 	free(supported_versions.extension_data);
