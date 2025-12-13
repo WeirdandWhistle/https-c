@@ -299,7 +299,7 @@ int main(){
 	supported_versions.extension_type = 43;
 	supported_versions.extension_data_length = 2;
 	supported_versions.extension_data = malloc(2); 
-	supported_versions.extension_data[0] = 0x03; supported_versions.extension_data[1] = 0x04; // TLS 1.1
+	supported_versions.extension_data[0] = 0x03; supported_versions.extension_data[1] = 0x04; // TLS 1.3
 	//sh.extensions[0] = supported_versions;
 	ex_length += 2 + 2 + 2; // type + length + payload/data
 
@@ -316,13 +316,14 @@ int main(){
 	ex_length += crypto_box_PUBLICKEYBYTES; // server public key 
 
 	record.length += ex_length;
-	hs.length = record.length - 1 - 2 -2;
+	hs.length = record.length - 2 -2 + 4; // lost 4 bytes of data some where. in the recod length i never added the handshake bytes. 4 bytes.
+	record.length += 4; // bytes for the handshake layer
 
 	//record
 	write(acc,&record.type,1);
 	writeUint16(acc, record.legacy_record_version);
 	writeUint16(acc, record.length);
-	printf("record_length: %d\nhandshake_length: %d\nextension_length: %d\n",record.length,hs.length,ex_length);
+	printf("record_length: %d\nhandshake_length: %d\nextension_length: %d\nsupported_versions length: %d\n",record.length,hs.length,ex_length,supported_versions.extension_data_length);
 
 	//handshake
 	write(acc, &hs.msg_type, 1);
