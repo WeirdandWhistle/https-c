@@ -375,34 +375,37 @@ int main(){
 	printf("record_length: %d\nhandshake_length: %d\nextension_length: %d\nsupported_versions length: %d\n",record.length,hs.length,ex_length,supported_versions.extension_data_length);
 
 	//handshake
-	write(acc, &hs.msg_type, 1);
-	writeUint24(acc, hs.length);
+	write(acc, &hs.msg_type, 1); crypto_hash_sha256_update(&tHash, &hs.msg_type, 1);
+	writeUint24(acc, hs.length); update_hash_uint24(&tHash, hs.length);
 	
 	//server_hello
-	writeUint16(acc, sh.legacy_version);
-	write(acc, sh.random, 32);
-	write(acc, &sh.legacy_session_id_echo_length, 1);
-	write(acc, sh.legacy_session_id_echo, sh.legacy_session_id_echo_length);
-	writeUint16(acc,sh.cipher_suite);
-	write(acc, &sh.legacy_compression_method,1);
+	writeUint16(acc, sh.legacy_version); update_hash_uint16(&tHash, sh.legacy_version);
+	write(acc, sh.random, 32); crypto_hash_sha256_update(&tHash, sh.random ,32);
+	write(acc, &sh.legacy_session_id_echo_length, 1); 			crypto_hash_sha256_update(&tHash, &sh.legacy_session_id_echo_length, 1);
+	write(acc, sh.legacy_session_id_echo, sh.legacy_session_id_echo_length);crypto_hash_sha256_update(&tHash, &sh.legacy_session_id_echo, sh.legacy_session_id_echo_length);
+	writeUint16(acc,sh.cipher_suite); update_hash_uint16(&tHash, sh.cipher_suite);
+	write(acc, &sh.legacy_compression_method,1); crypto_hash_sha256_update(&tHas, &sh.legacy_compression_method, 1);
 
 	//extensions
-	writeUint16(acc, ex_length);
+	writeUint16(acc, ex_length); update_hash_uint16(&tHash, ex_length);
 	//supported_versions
-	writeUint16(acc, supported_versions.extension_type);
-	writeUint16(acc, supported_versions.extension_data_length);
-	write(acc, supported_versions.extension_data, 2);
+	writeUint16(acc, supported_versions.extension_type); update_hash_uint16(&tHash, supported_version.extension_type);
+	writeUint16(acc, supported_versions.extension_data_length);update_hash_uint16(&tHash, supported_verions.extension_data_length);
+	write(acc, supported_versions.extension_data, 2); crypto_hash_sha256_update(&tHash, supported_version.extension_data, 2);
 	//key_share
-	writeUint16(acc, key_share.extension_type);
-	writeUint16(acc, key_share.extension_data_length);
-	writeUint16(acc, key_share_group);
-	writeUint16(acc, key_exchange_length);
-	write(acc, server_pk, crypto_box_PUBLICKEYBYTES);
+	writeUint16(acc, key_share.extension_type); 	  update_hash_uint16(&tHash, key_share.extension_type);
+	writeUint16(acc, key_share.extension_data_length);update_hash_uint16(&tHash, key_share.extension_data_length);
+	writeUint16(acc, key_share_group); 		  update_hash_uint16(&tHash, key_share_group);
+	writeUint16(acc, key_exchange_length); 		  update_hash_uint16(&tHash, key_share_length);
+
+	write(acc, server_pk, crypto_box_PUBLICKEYBYTES); crypto_hash_sha256_update(&tHash, server_pk, crypto_box_PUBLICKEYBYTES);
 
 	uint16_t test = 0x1234;
 	uint16_t nTest = htons(test);
 
 	printf("%x %x\n",(nTest>>0)&0xFF,(nTest>>8)&0xFF);
+
+	unsigned char[32] ZEROARRAY = {0};
 
 	
 
