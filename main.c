@@ -45,6 +45,13 @@ struct ServerHello {
 	uint16_t extensions_length;
 	struct Extension *extensions;
 };
+struct HkdfLabel{
+	uint16_t length;
+	uint8_t label_length;
+	unsigned char lable[255]; // "tls13 " + Label
+	uint8_t contex_length;
+	unsigned char contex[255];
+};
 void getUint16(int fd, uint16_t *out){
 	unsigned char buf[2];
 	read(fd, &buf, 2);
@@ -64,8 +71,46 @@ void writeUint24(int fd, uint32_t value){
 	write(fd, a, 3);
 	printf("uint24: %x %x %x\n",a[0],a[1],a[2]);
 }
-void parseExentions(int fd, struct Extension *ex, int length){
-	
+void HKDF_Expand_Label(unsigned char *outPtr, unsigned char Secret[], uint16_t secret_length, unsigned char Label[], uint8_t label_length, unsigned char Contex[], uint8_t contex_length, uint16_t Length){
+	unsigned char expandLabel[6+label_length];
+	unsigned char tls13[] = {'t','l','s','1','3',' '};
+	//compinde Lable and tls13
+	for(int i = 0; i<sizeof(expandLabel);i++){
+		if(i>6){expandLabel[i] = Label[i-6];}
+		else{expandLabel[i] = tls13[i];}
+	}
+	unsigned char l[2+1+label_length+contex_length];
+
+	uint16_t c = 0;
+
+	l[c] =  (Length>>0)&0xFF; l[c+1] = (Length>>8)&0xFF; c+=2;
+	l[c] = (uint8_t) 6+label_length; c++;
+
+	for(int i = 0; i<sizeof(expandLabel);i++){
+		l[i+c] = expandLabel[i];
+	} c += sizeof(expandLabel);
+
+	l[c] = contex_length; c++;
+	for(int i = 0; i<contex_length;i++){
+		l[c+i] = Contex[i];
+	} c+= contex_length;
+
+	crypto_kdf_hkdf_sha256_expand(outPtr, Length, l, sizeof(l), Secret);
+}
+void update_hash_uint16(crypto_hash_sha256_state *state, uint16_t num){
+	uint16_t out = htons(num);
+	unsigned char buf[] = {(out)&0xFF,(out>>8)&0xFF};
+	crypto_hash_sha256_update(state, buf, 2);
+}
+void update_hash_uint24(crypto_hash_sha256_state *state, uint32_t num){
+	uint32_t out = htonl(num);
+	unsigned char buf[] = {(out>>8)&0xFF, (out>>16)&0xFF,(out>>24)&0xFF};
+	crypto_hash_sha256_update(state,buf,3);
+}
+void update_hash_uint32(crypto_hash_sha256_state *state, uint32_t){
+	uint32_t out = htonl(num);
+	unsigned char buf[] =  {out&0xFF,(out>>8)&0xFF,(out>>16)&0xFF,(out>>24)&0xFF};
+	crypto_hash_sha256_update(state,buf,4);
 }
 int main(){
 	if(1){
@@ -120,6 +165,7 @@ int main(){
 	int acc = accept(soc, &accept_addr, &addrlen);
 	if(acc<0){printf("accept error!"); return 1;}
 
+	crypto_hash_sha256_state tHash;
 
 	struct ClientHello ch = {0};
 	struct TLSPlaintext record = {0};
@@ -136,28 +182,30 @@ int main(){
 	printf("length: %x\n", record.length);
 
 	read(acc, &hs.msg_type,1);
+       	crypto_hash_sha256_update(&tHash,&hs.msg_type,1);	
 
 	unsigned char hsLengthBuffer[3];
 	read(acc, &hsLengthBuffer, 3);
 	hs.length = ((hsLengthBuffer[0] << 8*(3-1))|(hsLengthBuffer[1] << 8*(3-2))|(hsLengthBuffer[2] << 8*(3-3)));
+	update_hash_uint24(&tHash,hs.length);
 
 	printf("hs-msg type: %x\n", hs.msg_type);
 	printf("hs-length %x\n",hs.length);
 
-	read(acc, &ch.legacy_version, 2);
-	read(acc, &ch.random, 32);
-	read(acc, &ch.legacy_session_id_length, 1);
-	read(acc, &ch.legacy_session_id, ch.legacy_session_id_length);
+	read(acc, &ch.legacy_version, 2); update_hash_uint16(&tHash,ch.legacy_version);
+	read(acc, ch.random, 32); crypto_hash_sha256_update(&tHash, ch.random);
+	read(acc, &ch.legacy_session_id_length, 1); crypto_hash_sha256_update(&tHash,&ch.legacy_session_id_length, 1);
+	read(acc, ch.legacy_session_id, ch.legacy_session_id_length); crypto_hash_sha256_update(&tHash, ch.legacy_session_id, ch.legacy_session_id_length);
 
-	getUint16(acc, &ch.cipher_suites_length);
+	getUint16(acc, &ch.cipher_suites_length); update_hash_uint16(&tHash, ch.cipher_suites_length);
 	ch.cipher_suites = malloc(ch.cipher_suites_length);
 	
 	if(ch.cipher_suites == NULL){printf("seg error is becuase null!\n");}
 
-	read(acc, ch.cipher_suites, ch.cipher_suites_length);
+	read(acc, ch.cipher_suites, ch.cipher_suites_length); crypto_hash_sha256_update(&tHash, ch.cipher_suites, ch.cipher_suites_length);
 
-	read(acc, &ch.legacy_compression_methods_length, 1);
-	read(acc, ch.legacy_compression_methods, ch.legacy_compression_methods_length);
+	read(acc, &ch.legacy_compression_methods_length, 1); crypto_hash_sha256_update(&tHash, &ch.legacy_compression_mthods_length, 1);
+	read(acc, ch.legacy_compression_methods, ch.legacy_compression_methods_length); crypto_hash_sha256_update(&tHash, ch.legacy_compression_methods, ch.legacy_compression_mthods_length);
 
 	printf("ch-legacy version: %x\n",ch.legacy_version);
 	printf("ch-random     : ");for(int i = 0; i<32;i++){printf("%X ",ch.random[i]);}printf("\n");	
@@ -173,7 +221,7 @@ int main(){
 	printf("cu-legacy compresssio lnegth: %d\nch-legacy comperession: ",ch.legacy_compression_methods_length);
 	for(int i = 0; i<ch.legacy_compression_methods_length;i++){printf("%X ",ch.legacy_compression_methods[i]);}printf("\n");
 
-	getUint16(acc, &ch.extensions_length);
+	getUint16(acc, &ch.extensions_length); update_hash_uint16(&tHash, ch.extensions_length);
 	
 	ch.extensions = malloc(ch.extensions_length);
 
@@ -205,6 +253,7 @@ int main(){
 		if(readEx >= ch.extensions_length){break;}
 
 	}
+	crypto_hash_sha256_update(&tHash, ch.extensions, ch.extensions_length);
 	ch.extensions_length = index;
 	/*
 	for(int i = 0; i<ch.extensions_length;i++){
@@ -349,6 +398,13 @@ int main(){
 	writeUint16(acc, key_share_group);
 	writeUint16(acc, key_exchange_length);
 	write(acc, server_pk, crypto_box_PUBLICKEYBYTES);
+
+	uint16_t test = 0x1234;
+	uint16_t nTest = htons(test);
+
+	printf("%x %x\n",(nTest>>0)&0xFF,(nTest>>8)&0xFF);
+
+	
 
 	printf("sleeping for 2 second...\n");
 	sleep(2);
