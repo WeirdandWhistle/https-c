@@ -71,7 +71,7 @@ void writeUint24(int fd, uint32_t value){
 	write(fd, a, 3);
 	printf("uint24: %x %x %x\n",a[0],a[1],a[2]);
 }
-void HKDF_Expand_Label(unsigned char *outPtr, unsigned char Secret[], uint16_t secret_length, unsigned char Label[], uint8_t label_length, unsigned char Contex[], uint8_t contex_length, uint16_t Length){
+void HKDF_Expand_Label(unsigned char *outPtr, unsigned char Secret[], unsigned char Label[], uint8_t label_length, unsigned char Contex[], uint8_t contex_length, uint16_t Length){
 	unsigned char expandLabel[6+label_length];
 	unsigned char tls13[] = {'t','l','s','1','3',' '};
 	//compinde Lable and tls13
@@ -107,7 +107,7 @@ void update_hash_uint24(crypto_hash_sha256_state *state, uint32_t num){
 	unsigned char buf[] = {(out>>8)&0xFF, (out>>16)&0xFF,(out>>24)&0xFF};
 	crypto_hash_sha256_update(state,buf,3);
 }
-void update_hash_uint32(crypto_hash_sha256_state *state, uint32_t){
+void update_hash_uint32(crypto_hash_sha256_state *state, uint32_t num){
 	uint32_t out = htonl(num);
 	unsigned char buf[] =  {out&0xFF,(out>>8)&0xFF,(out>>16)&0xFF,(out>>24)&0xFF};
 	crypto_hash_sha256_update(state,buf,4);
@@ -124,6 +124,7 @@ int main(){
 	}else{
 		printf("sodium succefuly init\n");
 	}
+	printf("crypto kedj bytes: %d\n",crypto_kdf_hkdf_sha256_KEYBYTES);
 
 	if(crypto_aead_aes256gcm_is_available() == 0){
 		printf("go mate with your self lib sodium\n");
@@ -166,6 +167,7 @@ int main(){
 	if(acc<0){printf("accept error!"); return 1;}
 
 	crypto_hash_sha256_state tHash;
+	crypto_hash_sha256_init(&tHash);
 
 	struct ClientHello ch = {0};
 	struct TLSPlaintext record = {0};
@@ -193,7 +195,7 @@ int main(){
 	printf("hs-length %x\n",hs.length);
 
 	read(acc, &ch.legacy_version, 2); update_hash_uint16(&tHash,ch.legacy_version);
-	read(acc, ch.random, 32); crypto_hash_sha256_update(&tHash, ch.random);
+	read(acc, ch.random, 32); crypto_hash_sha256_update(&tHash, ch.random, 32);
 	read(acc, &ch.legacy_session_id_length, 1); crypto_hash_sha256_update(&tHash,&ch.legacy_session_id_length, 1);
 	read(acc, ch.legacy_session_id, ch.legacy_session_id_length); crypto_hash_sha256_update(&tHash, ch.legacy_session_id, ch.legacy_session_id_length);
 
@@ -204,8 +206,8 @@ int main(){
 
 	read(acc, ch.cipher_suites, ch.cipher_suites_length); crypto_hash_sha256_update(&tHash, ch.cipher_suites, ch.cipher_suites_length);
 
-	read(acc, &ch.legacy_compression_methods_length, 1); crypto_hash_sha256_update(&tHash, &ch.legacy_compression_mthods_length, 1);
-	read(acc, ch.legacy_compression_methods, ch.legacy_compression_methods_length); crypto_hash_sha256_update(&tHash, ch.legacy_compression_methods, ch.legacy_compression_mthods_length);
+	read(acc, &ch.legacy_compression_methods_length, 1); crypto_hash_sha256_update(&tHash, &ch.legacy_compression_methods_length, 1);
+	read(acc, ch.legacy_compression_methods, ch.legacy_compression_methods_length); crypto_hash_sha256_update(&tHash, ch.legacy_compression_methods, ch.legacy_compression_methods_length);
 
 	printf("ch-legacy version: %x\n",ch.legacy_version);
 	printf("ch-random     : ");for(int i = 0; i<32;i++){printf("%X ",ch.random[i]);}printf("\n");	
@@ -232,13 +234,13 @@ int main(){
 		if(ex == NULL){printf("malloc failed!");return 1;}
 
 		uint16_t type, length;
-		getUint16(acc, &type);
-		getUint16(acc, &length);
+		getUint16(acc, &type); update_hash_uint16(&tHash, type);
+		getUint16(acc, &length); update_hash_uint16(&tHash, length);
 		readEx += 4;
 
 		ex->extension_data = malloc(length);
 		if(ex->extension_data == NULL){printf("malloc failed! fir extension data");}
-		read(acc, ex->extension_data, length);
+		read(acc, ex->extension_data, length); crypto_hash_sha256_update(&tHash, ex->extension_data, length);
 		readEx += length;
 
 		ex->extension_type = type;
@@ -253,7 +255,6 @@ int main(){
 		if(readEx >= ch.extensions_length){break;}
 
 	}
-	crypto_hash_sha256_update(&tHash, ch.extensions, ch.extensions_length);
 	ch.extensions_length = index;
 	/*
 	for(int i = 0; i<ch.extensions_length;i++){
@@ -382,21 +383,21 @@ int main(){
 	writeUint16(acc, sh.legacy_version); update_hash_uint16(&tHash, sh.legacy_version);
 	write(acc, sh.random, 32); crypto_hash_sha256_update(&tHash, sh.random ,32);
 	write(acc, &sh.legacy_session_id_echo_length, 1); 			crypto_hash_sha256_update(&tHash, &sh.legacy_session_id_echo_length, 1);
-	write(acc, sh.legacy_session_id_echo, sh.legacy_session_id_echo_length);crypto_hash_sha256_update(&tHash, &sh.legacy_session_id_echo, sh.legacy_session_id_echo_length);
+	write(acc, sh.legacy_session_id_echo, sh.legacy_session_id_echo_length);crypto_hash_sha256_update(&tHash, sh.legacy_session_id_echo, sh.legacy_session_id_echo_length);
 	writeUint16(acc,sh.cipher_suite); update_hash_uint16(&tHash, sh.cipher_suite);
-	write(acc, &sh.legacy_compression_method,1); crypto_hash_sha256_update(&tHas, &sh.legacy_compression_method, 1);
+	write(acc, &sh.legacy_compression_method,1); crypto_hash_sha256_update(&tHash, &sh.legacy_compression_method, 1);
 
 	//extensions
 	writeUint16(acc, ex_length); update_hash_uint16(&tHash, ex_length);
 	//supported_versions
-	writeUint16(acc, supported_versions.extension_type); update_hash_uint16(&tHash, supported_version.extension_type);
-	writeUint16(acc, supported_versions.extension_data_length);update_hash_uint16(&tHash, supported_verions.extension_data_length);
-	write(acc, supported_versions.extension_data, 2); crypto_hash_sha256_update(&tHash, supported_version.extension_data, 2);
+	writeUint16(acc, supported_versions.extension_type); update_hash_uint16(&tHash, supported_versions.extension_type);
+	writeUint16(acc, supported_versions.extension_data_length);update_hash_uint16(&tHash, supported_versions.extension_data_length);
+	write(acc, supported_versions.extension_data, 2); crypto_hash_sha256_update(&tHash, supported_versions.extension_data, 2);
 	//key_share
 	writeUint16(acc, key_share.extension_type); 	  update_hash_uint16(&tHash, key_share.extension_type);
 	writeUint16(acc, key_share.extension_data_length);update_hash_uint16(&tHash, key_share.extension_data_length);
 	writeUint16(acc, key_share_group); 		  update_hash_uint16(&tHash, key_share_group);
-	writeUint16(acc, key_exchange_length); 		  update_hash_uint16(&tHash, key_share_length);
+	writeUint16(acc, key_exchange_length); 		  update_hash_uint16(&tHash, key_exchange_length);
 
 	write(acc, server_pk, crypto_box_PUBLICKEYBYTES); crypto_hash_sha256_update(&tHash, server_pk, crypto_box_PUBLICKEYBYTES);
 
@@ -405,9 +406,40 @@ int main(){
 
 	printf("%x %x\n",(nTest>>0)&0xFF,(nTest>>8)&0xFF);
 
-	unsigned char[32] ZEROARRAY = {0};
+	unsigned char ZEROARRAY[32] = {0};
 
+	//crypto_hash_sha256_state copy = tHash;
+	//memcmp(&tHash, &copy, sizeof(crypto_hash_sha256_state));
+
+	printf("trascipt_hash: ");
+	unsigned char outHash[crypto_hash_sha256_BYTES];
+	crypto_hash_sha256_final(&tHash, outHash);
+	for(int i = 0; i < sizeof(outHash); i++){
+		printf("%02x",outHash[i]);
+	}printf("\n");
+	printf("early_secret: ");
+	unsigned char early_secret[crypto_kdf_hkdf_sha256_KEYBYTES];
+	crypto_kdf_hkdf_sha256_extract(early_secret, ZEROARRAY, 32, ZEROARRAY, 32);
 	
+	for(int i = 0; i<32;i++){printf("%02x",early_secret[i]);}printf("\n");
+
+	printf("derived_secret: ");
+	unsigned char derived_secret[32] = {0x67};
+	HKDF_Expand_Label(derived_secret, early_secret, "derived", sizeof("derived")-1, "", 0, 32);
+
+	for(int i = 0; i<32;i++){printf("%02x",derived_secret[i]);}printf("\n");
+
+	printf("handshake_secert\n");
+	unsigned char handshake_secret[crypto_kdf_hkdf_sha256_KEYBYTES];
+	crypto_kdf_hkdf_sha256_extract(handshake_secret, derived_secret,sizeof(derived_secret) ,sharedsecret, sizeof(sharedsecret));
+	printf("server hs tf secert\n");
+	unsigned char server_hs_traffic_secret[32];
+	HKDF_Expand_Label(server_hs_traffic_secret, handshake_secret,"s hs traffic", sizeof("s hs traffic")-1, outHash, sizeof(outHash), sizeof(server_hs_traffic_secret));
+	//printf("derived secret[0]: %x\n",derived_secret[0]);
+	for(int i = 0; i<32; i++){
+		printf("%02x", server_hs_traffic_secret[i]);
+	} printf("\n");
+
 
 	printf("sleeping for 2 second...\n");
 	sleep(2);

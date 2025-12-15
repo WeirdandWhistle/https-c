@@ -1,1 +1,1 @@
-gcc main.c -lsodium -o main
+gcc main.c -L /home/wnj/libsodium-stable/src/libsodium/.libs/ -lsodium -o main
