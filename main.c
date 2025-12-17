@@ -7,6 +7,8 @@
 #include <stdlib.h>
 #include <sodium.h>
 #include <math.h>
+#include <ctype.h>
+
 
 struct TLSPlaintext{
 	unsigned char type;
@@ -75,27 +77,40 @@ void HKDF_Expand_Label(unsigned char *outPtr, unsigned char Secret[], unsigned c
 	unsigned char expandLabel[6+label_length];
 	unsigned char tls13[] = {'t','l','s','1','3',' '};
 	//compinde Lable and tls13
-	for(int i = 0; i<sizeof(expandLabel);i++){
-		if(i>6){expandLabel[i] = Label[i-6];}
+	printf("--- start label ---\n-");
+	for(int i = 0; i<sizeof(expandLabel)+1;i++){
+		if(i>6-1){expandLabel[i] = Label[i-6-1];}
 		else{expandLabel[i] = tls13[i];}
+		printf("%c ", expandLabel[i]);
 	}
-	unsigned char l[2+1+label_length+contex_length];
+	printf("-\n--- end label ---\n");
+
+	unsigned char l[2+1+label_length+1+contex_length];
 
 	uint16_t c = 0;
 
 	l[c] =  (Length>>0)&0xFF; l[c+1] = (Length>>8)&0xFF; c+=2;
-	l[c] = (uint8_t) 6+label_length; c++;
-
+	l[c] = (uint8_t) (6+label_length) & 0xFF; c++;
+	printf("expaned label into l: \"");
 	for(int i = 0; i<sizeof(expandLabel);i++){
 		l[i+c] = expandLabel[i];
-	} c += sizeof(expandLabel);
+		printf("%c",l[i+c]);
+	} c += sizeof(expandLabel); printf("\"\n");
 
-	l[c] = contex_length; c++;
+	l[c] = (contex_length) & 0xFF; c++;
 	for(int i = 0; i<contex_length;i++){
 		l[c+i] = Contex[i];
 	} c+= contex_length;
 
 	crypto_kdf_hkdf_sha256_expand(outPtr, Length, l, sizeof(l), Secret);
+
+	//what the hell am i putting into this function debug part
+	printf("the hell i am printing: \"");
+	for(int i = 0; i<sizeof(l);i++){
+		char cToPrint = l[i];
+		if(isprint(cToPrint)){printf("%c",cToPrint);}
+		else{printf(".");}
+	}printf("\"\n");
 }
 void update_hash_uint16(crypto_hash_sha256_state *state, uint16_t num){
 	uint16_t out = htons(num);
