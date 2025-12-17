@@ -78,18 +78,23 @@ void HKDF_Expand_Label(unsigned char *outPtr, unsigned char Secret[], unsigned c
 	unsigned char tls13[] = {'t','l','s','1','3',' '};
 	//compinde Lable and tls13
 	printf("--- start label ---\n-");
-	for(int i = 0; i<sizeof(expandLabel)+1;i++){
-		if(i>6-1){expandLabel[i] = Label[i-6-1];}
+	for(int i = 0; i<sizeof(expandLabel);i++){
+		printf(" %d ",i);
+		if(i>=6){expandLabel[i] = Label[i-6];}
 		else{expandLabel[i] = tls13[i];}
-		printf("%c ", expandLabel[i]);
+		printf("%c", expandLabel[i]);
 	}
 	printf("-\n--- end label ---\n");
 
-	unsigned char l[2+1+label_length+1+contex_length];
+	unsigned char l[2+1+sizeof(expandLabel)+1+contex_length];
+
+	printf("label_elngth: %d expandLabel size: %d l size: %d\n", label_length, sizeof(expandLabel), sizeof(l));
 
 	uint16_t c = 0;
 
-	l[c] =  (Length>>0)&0xFF; l[c+1] = (Length>>8)&0xFF; c+=2;
+	uint16_t nol = htons(Length);
+
+	l[c] =  (nol>>0)&0xFF; l[c+1] = (nol>>8)&0xFF; c+=2;
 	l[c] = (uint8_t) (6+label_length) & 0xFF; c++;
 	printf("expaned label into l: \"");
 	for(int i = 0; i<sizeof(expandLabel);i++){
@@ -109,7 +114,7 @@ void HKDF_Expand_Label(unsigned char *outPtr, unsigned char Secret[], unsigned c
 	for(int i = 0; i<sizeof(l);i++){
 		char cToPrint = l[i];
 		if(isprint(cToPrint)){printf("%c",cToPrint);}
-		else{printf(".");}
+		else{printf("(0x%x)",cToPrint);}
 	}printf("\"\n");
 }
 void update_hash_uint16(crypto_hash_sha256_state *state, uint16_t num){
@@ -128,6 +133,12 @@ void update_hash_uint32(crypto_hash_sha256_state *state, uint32_t num){
 	crypto_hash_sha256_update(state,buf,4);
 }
 int main(){
+
+	unsigned char abc[] = "123abc";
+
+	printf("string %s length of that string %d\n",abc, sizeof(abc));
+	printf("whats the c encodeing for 32? its '%c'\n",32);
+
 	if(1){
 		uint64_t a = 0x0123456789abcdf;
 		uint32_t b = *(uint32_t*)&a;
@@ -351,7 +362,12 @@ int main(){
 	crypto_scalarmult_base(server_pk, server_sk);
 	if(crypto_scalarmult(sharedsecret, server_sk, client_pk)!=0){
 		printf("sharedsecret calculation did not work!\n");
-	}else{printf("shared secret calulation has worked!\n");}
+	}else{printf("shared secret calulation has worked!\n");
+	
+		printf("server-secret-key: "); for(int i = 0; i<sizeof(server_sk);i++){printf("%02x",server_sk[i]);}printf("\n");
+		printf("server-public-key: "); for(int i = 0; i<sizeof(server_pk);i++){printf("%02x",server_pk[i]);}printf("\n");
+	
+	}
 
 
 	
@@ -425,7 +441,7 @@ int main(){
 
 	//crypto_hash_sha256_state copy = tHash;
 	//memcmp(&tHash, &copy, sizeof(crypto_hash_sha256_state));
-
+	printf("shared_secret: "); for(int i = 0; i<sizeof(sharedsecret);i++){printf("%02x",sharedsecret[i]);} printf("\n");
 	printf("trascipt_hash: ");
 	unsigned char outHash[crypto_hash_sha256_BYTES];
 	crypto_hash_sha256_final(&tHash, outHash);
