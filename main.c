@@ -79,7 +79,7 @@ void HKDF_Expand_Label(unsigned char *outPtr, unsigned char Secret[], unsigned c
 	//compinde Lable and tls13
 	printf("--- start label ---\n-");
 	for(int i = 0; i<sizeof(expandLabel);i++){
-		printf(" %d ",i);
+		//printf(" %d ",i);
 		if(i>=6){expandLabel[i] = Label[i-6];}
 		else{expandLabel[i] = tls13[i];}
 		printf("%c", expandLabel[i]);
@@ -101,20 +101,22 @@ void HKDF_Expand_Label(unsigned char *outPtr, unsigned char Secret[], unsigned c
 		l[i+c] = expandLabel[i];
 		printf("%c",l[i+c]);
 	} c += sizeof(expandLabel); printf("\"\n");
-
+	
+	printf("Contex: 0x");
 	l[c] = (contex_length) & 0xFF; c++;
 	for(int i = 0; i<contex_length;i++){
 		l[c+i] = Contex[i];
-	} c+= contex_length;
+		printf("%02x", Contex[i]);
+	} c+= contex_length; printf("\n");
 
 	crypto_kdf_hkdf_sha256_expand(outPtr, Length, l, sizeof(l), Secret);
 
 	//what the hell am i putting into this function debug part
 	printf("the hell i am printing: \"");
 	for(int i = 0; i<sizeof(l);i++){
-		char cToPrint = l[i];
+		unsigned char cToPrint = l[i];
 		if(isprint(cToPrint)){printf("%c",cToPrint);}
-		else{printf("(0x%x)",cToPrint);}
+		else{printf("(0x%02x)",cToPrint);}
 	}printf("\"\n");
 }
 void update_hash_uint16(crypto_hash_sha256_state *state, uint16_t num){
@@ -157,6 +159,45 @@ int main(){
 		return 1;
 	} else{
 		printf("W in chat folks. AES is supported!\n");
+	}
+	// test cases
+	if(1){
+		unsigned char input_scalar[] = {0xa5, 0x46, 0xe3, 0x6b, 0xf0, 0x52, 0x7c, 0x9d, 0x3b, 0x16, 0x15, 0x4b, 0x82, 0x46, 0x5e, 0xdd, 0x62, 0x14, 0x4c, 0x0a, 0xc1, 0xfc, 0x5a, 0x18, 0x50, 0x6a,
+			0x22, 0x44, 0xba, 0x44, 0x9a, 0xc4};
+
+		unsigned char u_cord[] = {0xe6, 0xdb, 0x68, 0x67, 0x58, 0x30, 0x30, 0xdb, 0x35, 0x94, 0xc1, 0xa4, 0x24, 0xb1, 0x5f, 0x7c, 0x72, 0x66, 0x24, 0xec, 0x26, 0xb3, 0x35, 0x3b, 0x10, 0xa9, 0x03,
+			0xa6, 0xd0, 0xab, 0x1c, 0x4c};
+
+		unsigned char output[32];
+
+		if(crypto_scalarmult(output, input_scalar, u_cord)!= 0){
+			printf("a error occured with the test vector!");
+		} else {
+			printf("output : 0x");
+			for(int i = 0; i<32;i++){printf("%02x",output[i]);}
+			printf("\n");
+
+			printf("correct: 0xc3da55379de9c6908e94ea4df28d084f32eccf03491c71f754b4075577a28552\n");
+		}
+	}
+	//test case 2
+	if(1){
+		unsigned char input_scalar[] = {0x4b, 0x66, 0xe9, 0xd4, 0xd1, 0xb4, 0x67, 0x3c, 0x5a, 0xd2, 0x26, 0x91, 0x95, 0x7d, 0x6a, 0xf5, 0xc1, 0x1b, 0x64, 0x21, 0xe0, 0xea, 0x01, 0xd4, 0x2c, 0xa4, 0x16, 0x9e, 0x79, 0x18, 0xba, 0x0d};
+
+		unsigned char u_cord[] = {0xe5, 0x21, 0x0f, 0x12, 0x78, 0x68, 0x11, 0xd3, 0xf4, 0xb7, 0x95, 0x9d, 0x05, 0x38, 0xae, 0x2c, 0x31, 0xdb, 0xe7, 0x10, 0x6f, 0xc0, 0x3c, 0x3e, 0xfc, 0x4c, 0xd5, 0x49, 0xc7, 0x15, 0xa4, 0x93};
+
+		unsigned char output[32];
+
+		if(crypto_scalarmult(output, input_scalar, u_cord)!= 0){
+			printf("a error occured with the test vector!");
+		} else {
+			printf("output : 0x");
+			for(int i = 0; i<32;i++){printf("%02x",output[i]);}
+			printf("\n");
+
+			printf("correct: 0x95cbde9476e8907d7aade45cb4b873f88b595a68799fa152e6f8f7647aac7957\n");
+		}
+
 	}
 
 	unsigned char out[crypto_hash_sha256_BYTES];
@@ -463,10 +504,11 @@ int main(){
 	printf("handshake_secert\n");
 	unsigned char handshake_secret[crypto_kdf_hkdf_sha256_KEYBYTES];
 	crypto_kdf_hkdf_sha256_extract(handshake_secret, derived_secret,sizeof(derived_secret) ,sharedsecret, sizeof(sharedsecret));
-	printf("server hs tf secert\n");
+
 	unsigned char server_hs_traffic_secret[32];
 	HKDF_Expand_Label(server_hs_traffic_secret, handshake_secret,"s hs traffic", sizeof("s hs traffic")-1, outHash, sizeof(outHash), sizeof(server_hs_traffic_secret));
 	//printf("derived secret[0]: %x\n",derived_secret[0]);
+	printf("server hs tf secert\n");
 	for(int i = 0; i<32; i++){
 		printf("%02x", server_hs_traffic_secret[i]);
 	} printf("\n");
