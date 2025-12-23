@@ -355,6 +355,7 @@ int main(){
 						printf("we have a problem cap!\n");
 						return 1;
 					}
+					printf("key-share-extension-group-ECDHE-X25519: ");
 					for(int k = 0; k<crypto_box_PUBLICKEYBYTES;k++){client_pk[k] = key_exchange[k];printf("%x ",client_pk[k]);}
 					printf("\nclients key has been parsed and read!\n");
 					free(key_exchange);
@@ -394,6 +395,18 @@ int main(){
 	record.length += 3;
 
 	int numberOfExtensions = 2;
+
+	//literly have no other ideas
+	if(1){
+		unsigned char buf[sizeof(client_pk)];
+		for(int i = 0; i<sizeof(buf);i++){
+			buf[sizeof(buf)-i] = client_pk[i];
+		}
+		//client_pk = buf;
+		for(int i = 0; i<sizeof(buf);i++){
+			client_pk[i] = buf[i];
+		}
+	}
 
 	unsigned char server_pk[crypto_box_PUBLICKEYBYTES];
 	unsigned char server_sk[crypto_box_SECRETKEYBYTES];
