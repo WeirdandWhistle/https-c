@@ -397,7 +397,8 @@ int main(){
 	int numberOfExtensions = 2;
 
 	//literly have no other ideas
-	if(1){
+	if(0){
+		printf("------------------ running weird reversal scipt! ------------------------");
 		unsigned char buf[sizeof(client_pk)];
 		for(int i = 0; i<sizeof(buf);i++){
 			buf[sizeof(buf)-i] = client_pk[i];
@@ -420,6 +421,7 @@ int main(){
 	
 		printf("server-secret-key: "); for(int i = 0; i<sizeof(server_sk);i++){printf("%02x",server_sk[i]);}printf("\n");
 		printf("server-public-key: "); for(int i = 0; i<sizeof(server_pk);i++){printf("%02x",server_pk[i]);}printf("\n");
+		printf("client-public-key: "); for(int i = 0; i<sizeof(client_pk);i++){printf("%02x",client_pk[i]);}printf("\n");
 	
 	}
 
