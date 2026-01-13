@@ -93,6 +93,8 @@ void HKDF_Expand_Label(unsigned char *outPtr, unsigned char Secret[], unsigned c
 	uint16_t c = 0;
 
 	uint16_t nol = htons(Length);
+	printf("before: %02x after: %02x | before: b1:%02x b2:%02x after: b1:%02x b2:%02x\n",Length,nol,(Length>>0)&0xFF,(Length>>8)&0xFF,(nol>>0)&0xFF,(nol>>8)&0xFF);
+
 
 	l[c] =  (nol>>0)&0xFF; l[c+1] = (nol>>8)&0xFF; c+=2;
 	l[c] = (uint8_t) (6+label_length) & 0xFF; c++;
@@ -242,7 +244,10 @@ int main(){
 
 	unsigned char lengthBuffer[2];
 
-	read(acc, &record.type, 1);
+	int amount_of_times_connection_faild = 0;
+	while(read(acc, &record.type, 1)==-1){amount_of_times_connection_faild++; printf("connection faild %d times\n",amount_of_times_connection_faild);}
+
+
 	getUint16(acc, &record.legacy_record_version);
 	getUint16(acc, &record.length);
 	
@@ -523,7 +528,7 @@ int main(){
 	unsigned char server_hs_traffic_secret[32];
 	HKDF_Expand_Label(server_hs_traffic_secret, handshake_secret,"s hs traffic", sizeof("s hs traffic")-1, outHash, sizeof(outHash), sizeof(server_hs_traffic_secret));
 	//printf("derived secret[0]: %x\n",derived_secret[0]);
-	printf("server hs tf secert\n");
+	printf("server hs tf secert: ");
 	for(int i = 0; i<32; i++){
 		printf("%02x", server_hs_traffic_secret[i]);
 	} printf("\n");
