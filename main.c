@@ -1,3 +1,4 @@
+#include "hkdf.h"
 #include <string.h>
 #include <unistd.h>
 #include <netinet/in.h>
@@ -517,11 +518,17 @@ int main(){
 	
 	for(int i = 0; i<32;i++){printf("%02x",early_secret[i]);}printf("\n");
 
-	printf("derived_secret: ");
 	unsigned char derived_secret[32] = {0x67};
+	unsigned char derived_secret_test[32];
+	size_t hash_length_test = 32;
 	HKDF_Expand_Label(derived_secret, early_secret, "derived", sizeof("derived")-1, "", 0, 32);
+	hkdf_expand_label(early_secret, sizeof(early_secret),
+				"derived", sizeof("derived")-1,
+				"", 0,
+				derived_secret_test, &hash_length_test);
 
-	for(int i = 0; i<32;i++){printf("%02x",derived_secret[i]);}printf("\n");
+	printf("derived_secret     : ");for(int i = 0; i<32;i++){			  printf("%02x",derived_secret[i]);}     printf("\n");
+	printf("derived_secret_test: ");for(int i = 0; i<sizeof(derived_secret_test);i++){printf("%02x",derived_secret_test[i]);}printf("\n");
 
 	printf("handshake_secert\n");
 	unsigned char handshake_secret[crypto_kdf_hkdf_sha256_KEYBYTES];
