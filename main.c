@@ -500,6 +500,8 @@ int main(){
 
 	unsigned char ZEROARRAY[32] = {0};
 
+	printf("ZEROARRAY: ");for(int i = 0; i< 32; i++){printf("%02x", ZEROARRAY[i]);}printf("\n");
+
 	//crypto_hash_sha256_state copy = tHash;
 	//memcmp(&tHash, &copy, sizeof(crypto_hash_sha256_state));
 	printf("shared_secret: "); for(int i = 0; i<sizeof(sharedsecret);i++){printf("%02x",sharedsecret[i]);} printf("\n");
@@ -528,10 +530,13 @@ int main(){
 	unsigned char server_hs_traffic_secret[32];
 	HKDF_Expand_Label(server_hs_traffic_secret, handshake_secret,"s hs traffic", sizeof("s hs traffic")-1, outHash, sizeof(outHash), sizeof(server_hs_traffic_secret));
 	//printf("derived secret[0]: %x\n",derived_secret[0]);
+	//color
+	printf("\x1b[31m"); // red
+	
 	printf("server hs tf secert: ");
 	for(int i = 0; i<32; i++){
 		printf("%02x", server_hs_traffic_secret[i]);
-	} printf("\n");
+	} printf("\n"); printf("\x1b[0m"); // color reset
 
 
 	printf("sleeping for 2 second...\n");
