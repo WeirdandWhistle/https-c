@@ -532,18 +532,26 @@ int main(){
 
 	printf("handshake_secert\n");
 	unsigned char handshake_secret[crypto_kdf_hkdf_sha256_KEYBYTES];
-	crypto_kdf_hkdf_sha256_extract(handshake_secret, derived_secret,sizeof(derived_secret) ,sharedsecret, sizeof(sharedsecret));
+	crypto_kdf_hkdf_sha256_extract(handshake_secret, derived_secret, sizeof(derived_secret), sharedsecret, sizeof(sharedsecret));
 
 	unsigned char server_hs_traffic_secret[32];
+	unsigned char server_hs_traffic_secret_test[32];
 	HKDF_Expand_Label(server_hs_traffic_secret, handshake_secret,"s hs traffic", sizeof("s hs traffic")-1, outHash, sizeof(outHash), sizeof(server_hs_traffic_secret));
+	
+	hkdf_expand_label(handshake_secret,sizeof(handshake_secret),
+				"s hs traffic", sizeof("s hs traffic")-1,
+				outHash, sizeof(outHash),
+				server_hs_traffic_secret_test, &hash_length_test);
+
 	//printf("derived secret[0]: %x\n",derived_secret[0]);
 	//color
-	printf("\x1b[31m"); // red
 	
-	printf("server hs tf secert: ");
-	for(int i = 0; i<32; i++){
-		printf("%02x", server_hs_traffic_secret[i]);
-	} printf("\n"); printf("\x1b[0m"); // color reset
+
+
+	printf("\x1b[31m"); // red
+	printf("server hs tf secert     : ");for(int i = 0; i<32; i++){printf("%02x", server_hs_traffic_secret[i]);     } printf("\n"); printf("\x1b[0m"); // color reset
+	printf("\x1b[33m");//yellow
+	printf("server_hs_tf_secret_test: ");for(int i = 0; i<32; i++){printf("%02x", server_hs_traffic_secret_test[i]);} printf("\n"); printf("\x1b[0m");//color reset
 
 
 	printf("sleeping for 2 second...\n");
