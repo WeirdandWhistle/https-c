@@ -18,7 +18,7 @@ struct TLSPlaintext{
 };
 struct Handshake {
 	unsigned char msg_type;
-	uint32_t length; 
+	uint32_t length; // 24 uint 
 };
 struct Extension {
 	uint16_t extension_type;
@@ -572,7 +572,22 @@ int main(){
 	printf("\x1b[33m");//yellow
 	printf("server_hs_tf_secret_test: ");for(int i = 0; i<32; i++){printf("%02x", server_hs_traffic_secret_test[i]);} printf("\n"); printf("\x1b[0m");//color reset
 
+	
+	if(1){//for reuasl of important names
+		//ENCRYPTED EXTENSION none
+		//TLSCipherText & addiontal data
+		record.type = 23; //doesn matter for encryption // opaque_type
+				  //legacy version
+		record.length = 2 + 0 + 1;//extensions + padding + realy content type // length
 
+		//TLSInnerplain text // encrypted_record[length]
+		unsigned char content[] = {0,0};
+		uint8_t type = 22; //contant type handshake = 22
+		//padding none
+
+
+
+	}
 	printf("sleeping for 2 second...\n");
 	sleep(2);
 
