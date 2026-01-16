@@ -521,10 +521,15 @@ int main(){
 	unsigned char derived_secret[32] = {0x67};
 	unsigned char derived_secret_test[32];
 	size_t hash_length_test = 32;
-	HKDF_Expand_Label(derived_secret, early_secret, "derived", sizeof("derived")-1, "", 0, 32);
+
+	unsigned char empty_hash[32];
+	crypto_hash_sha256(empty_hash, NULL, 0);
+	printf("empty_hash: ");for(int i = 0; i<32;i++){printf("%02x",empty_hash[i]);}printf("\n");
+
+	HKDF_Expand_Label(derived_secret, early_secret, "derived", sizeof("derived")-1, empty_hash, 32, 32);
 	hkdf_expand_label(early_secret, sizeof(early_secret),
 				"derived", sizeof("derived")-1,
-				"", 0,
+				empty_hash, 32,
 				derived_secret_test, &hash_length_test);
 
 	printf("derived_secret     : ");for(int i = 0; i<32;i++){			  printf("%02x",derived_secret[i]);}     printf("\n");
