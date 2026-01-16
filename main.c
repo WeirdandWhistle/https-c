@@ -74,6 +74,18 @@ void writeUint24(int fd, uint32_t value){
 	write(fd, a, 3);
 	printf("uint24: %x %x %x\n",a[0],a[1],a[2]);
 }
+void printArrayHex(char name[], unsigned char *arr, size_t size){
+	printf("%s: ",name);
+	for(int i = 0; i<size;i++){
+		printf("%02x",arr[i]);
+	}
+	printf("\n");
+}
+void getHash(crypto_hash_sha256_state *ptr, unsigned char *out){
+	crypto_hash_sha256_state copy;
+	memcpy(&copy,ptr,sizeof(crypto_hash_sha256_state));
+	crypto_hash_sha256_final(&copy, out);
+}
 void HKDF_Expand_Label(unsigned char *outPtr, unsigned char Secret[], unsigned char Label[], uint8_t label_length, unsigned char Contex[], uint8_t contex_length, uint16_t Length){
 	unsigned char expandLabel[6+label_length];
 	unsigned char tls13[] = {'t','l','s','1','3',' '};
@@ -506,12 +518,14 @@ int main(){
 	//crypto_hash_sha256_state copy = tHash;
 	//memcmp(&tHash, &copy, sizeof(crypto_hash_sha256_state));
 	printf("shared_secret: "); for(int i = 0; i<sizeof(sharedsecret);i++){printf("%02x",sharedsecret[i]);} printf("\n");
-	printf("trascipt_hash: ");
 	unsigned char outHash[crypto_hash_sha256_BYTES];
-	crypto_hash_sha256_final(&tHash, outHash);
-	for(int i = 0; i < sizeof(outHash); i++){
-		printf("%02x",outHash[i]);
-	}printf("\n");
+	//unsigned char testHash[32];
+
+	getHash(&tHash, outHash);
+	//crypto_hash_sha256_final(&tHash, outHash);
+
+	printArrayHex("outHash", outHash, sizeof(outHash));	
+
 	printf("early_secret: ");
 	unsigned char early_secret[crypto_kdf_hkdf_sha256_KEYBYTES];
 	crypto_kdf_hkdf_sha256_extract(early_secret, ZEROARRAY, 32, ZEROARRAY, 32);
