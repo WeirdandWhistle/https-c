@@ -74,6 +74,12 @@ void writeUint24(int fd, uint32_t value){
 	write(fd, a, 3);
 	printf("uint24: %x %x %x\n",a[0],a[1],a[2]);
 }
+void getUint24(unsigned char *outPtr, uint32_t value){
+	uint32_t out = htonl(value);
+	outPtr[0] = (out>>8 )&0xFF;
+	outPtr[1] = (out>>16)&0xFF;
+	outPtr[2] = (out>>24)&0xFF;
+}
 void printArrayHex(char name[], unsigned char *arr, size_t size){
 	printf("%s: ",name);
 	for(int i = 0; i<size;i++){
@@ -86,53 +92,60 @@ void getHash(crypto_hash_sha256_state *ptr, unsigned char *out){
 	memcpy(&copy,ptr,sizeof(crypto_hash_sha256_state));
 	crypto_hash_sha256_final(&copy, out);
 }
+void generateNouce(unsigned char *out, unsigned char *iv, uint8_t counter){
+	for(int i = 0; i<=10;i++){
+		out[i] = iv[i];
+		printf("%d ",i);
+	} printf("\n");
+	out[11] = iv[11] ^ counter;
+}
 void HKDF_Expand_Label(unsigned char *outPtr, unsigned char Secret[], unsigned char Label[], uint8_t label_length, unsigned char Contex[], uint8_t contex_length, uint16_t Length){
 	unsigned char expandLabel[6+label_length];
 	unsigned char tls13[] = {'t','l','s','1','3',' '};
 	//compinde Lable and tls13
-	printf("--- start label ---\n-");
+	//printf("--- start label ---\n-");
 	for(int i = 0; i<sizeof(expandLabel);i++){
 		//printf(" %d ",i);
 		if(i>=6){expandLabel[i] = Label[i-6];}
 		else{expandLabel[i] = tls13[i];}
-		printf("%c", expandLabel[i]);
+		//printf("%c", expandLabel[i]);
 	}
-	printf("-\n--- end label ---\n");
+	//printf("-\n--- end label ---\n");
 
 	unsigned char l[2+1+sizeof(expandLabel)+1+contex_length];
 
-	printf("label_elngth: %d expandLabel size: %d l size: %d\n", label_length, sizeof(expandLabel), sizeof(l));
+	//printf("label_elngth: %d expandLabel size: %d l size: %d\n", label_length, sizeof(expandLabel), sizeof(l));
 
 	uint16_t c = 0;
 
 	uint16_t nol = htons(Length);
-	printf("before: %02x after: %02x | before: b1:%02x b2:%02x after: b1:%02x b2:%02x\n",Length,nol,(Length>>0)&0xFF,(Length>>8)&0xFF,(nol>>0)&0xFF,(nol>>8)&0xFF);
+	//printf("before: %02x after: %02x | before: b1:%02x b2:%02x after: b1:%02x b2:%02x\n",Length,nol,(Length>>0)&0xFF,(Length>>8)&0xFF,(nol>>0)&0xFF,(nol>>8)&0xFF);
 
 
 	l[c] =  (nol>>0)&0xFF; l[c+1] = (nol>>8)&0xFF; c+=2;
 	l[c] = (uint8_t) (6+label_length) & 0xFF; c++;
-	printf("expaned label into l: \"");
+	//printf("expaned label into l: \"");
 	for(int i = 0; i<sizeof(expandLabel);i++){
 		l[i+c] = expandLabel[i];
-		printf("%c",l[i+c]);
-	} c += sizeof(expandLabel); printf("\"\n");
+		//printf("%c",l[i+c]);
+	} c += sizeof(expandLabel); //printf("\"\n");
 	
-	printf("Contex: 0x");
+	//printf("Contex: 0x");
 	l[c] = (contex_length) & 0xFF; c++;
 	for(int i = 0; i<contex_length;i++){
 		l[c+i] = Contex[i];
-		printf("%02x", Contex[i]);
-	} c+= contex_length; printf("\n");
+		//printf("%02x", Contex[i]);
+	} c+= contex_length; //printf("\n");
 
 	crypto_kdf_hkdf_sha256_expand(outPtr, Length, l, sizeof(l), Secret);
 
 	//what the hell am i putting into this function debug part
-	printf("the hell i am printing: \"");
-	for(int i = 0; i<sizeof(l);i++){
-		unsigned char cToPrint = l[i];
-		if(isprint(cToPrint)){printf("%c",cToPrint);}
-		else{printf("(0x%02x)",cToPrint);}
-	}printf("\"\n");
+	//printf("the hell i am printing: \"");
+	//for(int i = 0; i<sizeof(l);i++){
+		//unsigned char cToPrint = l[i];
+		//if(isprint(cToPrint)){printf("%c",cToPrint);}
+		//else{printf("(0x%02x)",cToPrint);}
+	//}printf("\"\n");
 }
 void update_hash_uint16(crypto_hash_sha256_state *state, uint16_t num){
 	uint16_t out = htons(num);
@@ -407,7 +420,7 @@ int main(){
 
 	record.length += 1 + ch.legacy_session_id_length;
 
-	sh.cipher_suite = 0x1301; // TLS_AES_128_GCM_SHA256
+	sh.cipher_suite = 0x1303; // TLS_CHACHA20_POLY1305_SHA256
 	sh.legacy_compression_method = 0; // must be ZERO 0
 	
 	record.length += 3;
@@ -572,20 +585,60 @@ int main(){
 	printf("\x1b[33m");//yellow
 	printf("server_hs_tf_secret_test: ");for(int i = 0; i<32; i++){printf("%02x", server_hs_traffic_secret_test[i]);} printf("\n"); printf("\x1b[0m");//color reset
 
-	
+
+	uint8_t nouceCounter = 0;
+
 	if(1){//for reuasl of important names
 		//ENCRYPTED EXTENSION none
 		//TLSCipherText & addiontal data
-		record.type = 23; //doesn matter for encryption // opaque_type
-				  //legacy version
-		record.length = 2 + 0 + 1;//extensions + padding + realy content type // length
+		record.type = 23; //doesn matter for encryption // opaque_type                             1 bytes
+				  //legacy version						             2 bytes
+		record.length = 0; //
 
 		//TLSInnerplain text // encrypted_record[length]
-		unsigned char content[] = {0,0};
-		uint8_t type = 22; //contant type handshake = 22
+		unsigned char content[] = {0,0}; record.length += 2;
+		uint8_t type = 22; record.length += 1; //contant type handshake = 22
 		//padding none
+			
+		unsigned char uint24[3]; record.length += 3;
+		getUint24(uint24, 2);
 
+		record.length += 1;// for msg type (EE)
 
+		unsigned char message[] = {8, uint24[0], uint24[1], uint24[2], 0,0,22};
+
+		printf("crypto_aead_chacha20poly1305_IETF_KEYBYTES = %d\n",crypto_aead_chacha20poly1305_IETF_KEYBYTES);
+		printf("crypto_aead_chacha20poly1305_IETF_NPUBBYTES = %d\n", crypto_aead_chacha20poly1305_IETF_NPUBBYTES);
+		printf("crypto_aead_chacha20poly1305_IETF_ABYTES = %d\n",crypto_aead_chacha20poly1305_IETF_ABYTES);	
+		unsigned char server_write_key[crypto_aead_chacha20poly1305_IETF_KEYBYTES];//should be 32
+		unsigned char server_write_iv[crypto_aead_chacha20poly1305_IETF_KEYBYTES];
+
+		HKDF_Expand_Label(server_write_key, server_hs_traffic_secret, "key", 3, NULL, 0, crypto_aead_chacha20poly1305_IETF_KEYBYTES);
+		HKDF_Expand_Label(server_write_iv, server_hs_traffic_secret, "iv", 2, NULL, 0, crypto_aead_chacha20poly1305_IETF_NPUBBYTES);
+
+		unsigned char nouce[crypto_aead_chacha20poly1305_IETF_NPUBBYTES];//should be 12
+		generateNouce(nouce, server_write_iv, nouceCounter);
+
+		unsigned char cipher[2 + 1 + crypto_aead_chacha20poly1305_IETF_ABYTES]; // extension content + type + tag length
+		unsigned long long clen_p;
+
+		record.length += crypto_aead_chacha20poly1305_IETF_ABYTES; // for the ad tag
+		uint16_t networkLength = htons(record.length);
+		
+		unsigned char addiontal_data[] = {record.type, 0x03, 0x03, (networkLength)&0xFF, (networkLength>>8)&0xFF};
+
+		int return_encrypted = crypto_aead_chacha20poly1305_ietf_encrypt(cipher, &clen_p,
+								message, sizeof(message),
+								addiontal_data, sizeof(addiontal_data),
+								NULL,
+								nouce,
+								server_write_key);
+
+		write(acc, addiontal_data, sizeof(addiontal_data));
+		write(acc, cipher, clen_p);
+
+		printf("return_encrypted: %d\n",return_encrypted);
+		printf("bytes encrypted in to cipher: %d\n",clen_p);
 
 	}
 	printf("sleeping for 2 second...\n");
