@@ -80,6 +80,11 @@ void getUint24(unsigned char *outPtr, uint32_t value){
 	outPtr[1] = (out>>16)&0xFF;
 	outPtr[2] = (out>>24)&0xFF;
 }
+void getUint16Arr(unsigned char *outPtr, uint16_t value){
+	uint16_t out = htons(value);
+	outPtr[0] = (out)&0xFF;
+	outPtr[1] = (out>>8)&0xFF;
+}
 void printArrayHex(char name[], unsigned char *arr, size_t size){
 	printf("%s: ",name);
 	for(int i = 0; i<size;i++){
@@ -588,6 +593,14 @@ int main(){
 
 	uint8_t nouceCounter = 0;
 
+	unsigned char server_write_key[crypto_aead_chacha20poly1305_IETF_KEYBYTES];//should be 32
+	unsigned char server_write_iv[crypto_aead_chacha20poly1305_IETF_KEYBYTES];
+
+	HKDF_Expand_Label(server_write_key, server_hs_traffic_secret, "key", 3, NULL, 0, crypto_aead_chacha20poly1305_IETF_KEYBYTES);
+	HKDF_Expand_Label(server_write_iv, server_hs_traffic_secret, "iv", 2, NULL, 0, crypto_aead_chacha20poly1305_IETF_NPUBBYTES);
+
+
+
 	if(1){//for reuasl of important names
 		//ENCRYPTED EXTENSION none
 		//TLSCipherText & addiontal data
@@ -610,12 +623,6 @@ int main(){
 		printf("crypto_aead_chacha20poly1305_IETF_KEYBYTES = %d\n",crypto_aead_chacha20poly1305_IETF_KEYBYTES);
 		printf("crypto_aead_chacha20poly1305_IETF_NPUBBYTES = %d\n", crypto_aead_chacha20poly1305_IETF_NPUBBYTES);
 		printf("crypto_aead_chacha20poly1305_IETF_ABYTES = %d\n",crypto_aead_chacha20poly1305_IETF_ABYTES);	
-		unsigned char server_write_key[crypto_aead_chacha20poly1305_IETF_KEYBYTES];//should be 32
-		unsigned char server_write_iv[crypto_aead_chacha20poly1305_IETF_KEYBYTES];
-
-		HKDF_Expand_Label(server_write_key, server_hs_traffic_secret, "key", 3, NULL, 0, crypto_aead_chacha20poly1305_IETF_KEYBYTES);
-		HKDF_Expand_Label(server_write_iv, server_hs_traffic_secret, "iv", 2, NULL, 0, crypto_aead_chacha20poly1305_IETF_NPUBBYTES);
-
 		unsigned char nouce[crypto_aead_chacha20poly1305_IETF_NPUBBYTES];//should be 12
 		generateNouce(nouce, server_write_iv, nouceCounter);
 
@@ -637,10 +644,118 @@ int main(){
 		write(acc, addiontal_data, sizeof(addiontal_data));
 		write(acc, cipher, clen_p);
 
+		nouceCounter += 1;
+
 		printf("return_encrypted: %d\n",return_encrypted);
 		printf("bytes encrypted in to cipher: %d\n",clen_p);
 
 	}
+	sleep(1);
+	//Certificate
+	if(1){
+		record.length = 0;
+		//legacy version 0x0303
+		record.type = 23; // application | whenever encrypting
+		
+		//content
+		uint32_t cert_data_length = 0;
+		//read cert.der file for binary encoding
+		FILE *filePtr;
+		filePtr = fopen("cert.der","r");
+		
+		fseek(filePtr, 0, SEEK_END);
+		 cert_data_length = ftell(filePtr);
+		
+		//printf("file size: %d\n", fileSize);
+
+		rewind(filePtr);
+
+		unsigned char *cert_data = malloc(cert_data_length);
+		fread(cert_data, 1, cert_data_length, filePtr);
+
+		fclose(filePtr);
+		printf("secsfuly read certifacte!\n");
+		//printArrayHex("cert_data",cert_data,cert_data_length);
+		
+		uint16_t extensions_length = 0;
+		
+		uint32_t certificate_list_length = 3 + cert_data_length + 2; // cert_data_length + cert_data + extnesions_length
+		
+		uint8_t certificate_request_contex_length = 0;
+
+		uint32_t handshake_length = 1 + certificate_request_contex_length + 3 + certificate_list_length;
+
+		uint8_t handshake_type = 11; // certificate
+
+		unsigned char *fragment = malloc(handshake_length + 3 + 1 + 1);
+		unsigned char *iter = fragment;
+
+		*iter = handshake_type; iter += 1;
+
+		unsigned char len[3];
+		getUint24(len, handshake_length);
+		memcpy(iter,len,3);
+		iter += 3;
+		
+		*iter = certificate_request_contex_length; iter += 1;
+
+		getUint24(len, certificate_list_length);
+		memcpy(iter, len, 3);
+		iter += 3;
+
+		//*iter = 0; iter += 1;
+
+		getUint24(len, cert_data_length);
+		memcpy(iter, len, 3);
+		iter += 3;
+
+		memcpy(iter, cert_data, cert_data_length);
+		iter += cert_data_length;
+
+		unsigned char len16[2];
+		getUint16Arr(len16, extensions_length);
+	       	memcpy(iter, len16, 2);
+		iter += 2;
+
+		*iter = 22;
+
+		//printArrayHex("fragment",fragment,handshake_length + 5);
+
+		unsigned char nouce[crypto_aead_chacha20poly1305_IETF_NPUBBYTES];
+		generateNouce(nouce, server_write_iv, nouceCounter);
+		
+		record.length = handshake_length + 5 + crypto_aead_chacha20poly1305_IETF_ABYTES;
+		record.type = 23;
+		printf("record length: %d\n",record.length);
+		
+		uint16_t network_length = htons(record.length);
+		unsigned char addiontal_data[] = {23, 0x03, 0x03, (network_length) &0xFF, (network_length>>8)&0xFF};
+		printArrayHex("addiontal_data",addiontal_data,sizeof(addiontal_data));
+
+		unsigned char cipher[record.length];
+		unsigned long long clen_p;
+
+		int return_cipher = crypto_aead_chacha20poly1305_ietf_encrypt(cipher, &clen_p,
+										fragment, handshake_length + 5,
+										addiontal_data, sizeof(addiontal_data),
+										NULL,
+										nouce,
+										server_write_key);
+		printf("reutnerd resualt: %d\n", return_cipher);
+		printf("length of cipher made: %d\n", clen_p);
+
+		write(acc, addiontal_data, sizeof(addiontal_data));
+		write(acc, cipher, sizeof(cipher));
+
+		free(fragment);
+		free(cert_data);
+
+		printf("everything on wire...\n");
+
+		
+
+	}
+
 	printf("sleeping for 2 second...\n");
 	sleep(2);
 
