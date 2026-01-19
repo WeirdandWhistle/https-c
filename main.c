@@ -319,7 +319,7 @@ int main(){
 
 	for(int i = 0; i<ch.cipher_suites_length/2;i+=2){
 		printf("0x%x%x, ",ch.cipher_suites[i],ch.cipher_suites[i+1]);
-		if(ch.cipher_suites[i] == 0x013 && ch.cipher_suites[i+1] == 0x01){printf(" :yay: has sha256 gmc, ");}
+		if(ch.cipher_suites[i] == 0x013 && ch.cipher_suites[i+1] == 0x03){printf(" :yay: has sha256 gmc, ");}
 	}
 	printf("\n");
 
@@ -619,6 +619,7 @@ int main(){
 		record.length += 1;// for msg type (EE)
 
 		unsigned char message[] = {8, uint24[0], uint24[1], uint24[2], 0,0,22};
+		crypto_hash_sha256_update(&tHash, message, sizeof(message)-1);
 
 		printf("crypto_aead_chacha20poly1305_IETF_KEYBYTES = %d\n",crypto_aead_chacha20poly1305_IETF_KEYBYTES);
 		printf("crypto_aead_chacha20poly1305_IETF_NPUBBYTES = %d\n", crypto_aead_chacha20poly1305_IETF_NPUBBYTES);
@@ -650,7 +651,7 @@ int main(){
 		printf("bytes encrypted in to cipher: %d\n",clen_p);
 
 	}
-	sleep(1);
+	//sleep(1);
 	//Certificate
 	if(1){
 		record.length = 0;
@@ -719,6 +720,8 @@ int main(){
 
 		*iter = 22;
 
+		crypto_hash_sha256_update(&tHash, fragment, handshake_length + 4);
+
 		//printArrayHex("fragment",fragment,handshake_length + 5);
 
 		unsigned char nouce[crypto_aead_chacha20poly1305_IETF_NPUBBYTES];
@@ -753,6 +756,40 @@ int main(){
 		printf("everything on wire...\n");
 
 		
+
+	}
+	sleep(1);
+	//certverify
+	if(1){
+		printf("crypto_sign_SECRETKEYBYTES: %d\n",crypto_sign_SECRETKEYBYTES);
+		printf("crypto_sign_SEEDBYTES: %d\n",crypto_sign_SEEDBYTES);
+		
+		FILE *filePtr;
+		filePtr = fopen("key.hex", "r");
+
+		unsigned char secret_seed_hex[64];
+		fread(secret_seed_hex, 364, 1, filePtr);
+
+		fclose(filePtr);
+
+		unsigned char secret_seed[32];
+		sodium_hex2bin(secret_seed, 32,
+				secret_seed_hex, 64,
+				NULL, NULL, NULL);
+
+		printArrayHex("secret_seed",secret_seed,32);
+
+		unsigned char sign_public_key[crypto_sign_PUBLICKEYBYTES];
+		unsigned char sign_secret_key[crypto_sign_SECRETKEYBYTES];
+
+		crypto_sign_seed_keypair(sign_public_key, sign_secret_key, secret_seed);
+
+		printArrayHex("sign_public_key", sign_public_key, crypto_sign_PUBLICKEYBYTES);
+		printArrayHex("sign_secret_key", sign_secret_key, crypto_sign_SECRETKEYBYTES);
+
+		unsigned char to_sign[32 + 33 + 1 + 32];//0x20 32 times + contex string + 0 bytes seperator + content to be signed transcipt hash
+		unsigned char *iter = tosign;
+
 
 	}
 
