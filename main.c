@@ -754,7 +754,7 @@ int main(){
 		free(cert_data);
 
 		printf("everything on wire...\n");
-
+		nouceCounter += 1;
 		
 
 	}
@@ -787,10 +787,84 @@ int main(){
 		printArrayHex("sign_public_key", sign_public_key, crypto_sign_PUBLICKEYBYTES);
 		printArrayHex("sign_secret_key", sign_secret_key, crypto_sign_SECRETKEYBYTES);
 
-		unsigned char to_sign[32 + 33 + 1 + 32];//0x20 32 times + contex string + 0 bytes seperator + content to be signed transcipt hash
-		unsigned char *iter = tosign;
+		unsigned char to_sign[64 + 33 + 1 + 32];//0x20 64 times + contex string + 0 bytes seperator + content to be signed transcipt hash
+		unsigned char *iter = to_sign;
+
+		unsigned char octet_loop[64];
+		for(int i = 0; i<sizeof(octet_loop);i++){
+			octet_loop[i] = 32;
+		}
+		memcpy(iter, octet_loop, sizeof(octet_loop));
+		iter += sizeof(octet_loop);
+
+		unsigned char context_string[] = "TLS 1.3, server CertificateVerify";
+		memcpy(iter, context_string, sizeof(context_string) - 1);
+		iter += sizeof(context_string) - 1;
+
+		*iter = 0;
+		iter += 1;
+
+		unsigned char transcipt_hash[32];
+		getHash(&tHash, transcipt_hash);
+		memcpy(iter, transcipt_hash, 32);
+		iter += 32;
+
+		unsigned long long siglen;
+		unsigned char sig[crypto_sign_BYTES];
+
+		crypto_sign_detached(sig, &siglen,
+					to_sign, sizeof(to_sign),
+					sign_secret_key);
+
+		unsigned char fragment[4 + 2 + 2 + crypto_sign_BYTES + 1];
+		iter = fragment;
+
+		*iter = 15; iter += 1;
+
+		unsigned char len24[3];
+		getUint24(len24, sizeof(fragment) - 4 - 1);
+		memcpy(iter, len24, 3);
+		iter += 3;
+		
+		*iter = 0x08; iter += 1;
+		*iter = 0x07; iter += 1;
+
+		unsigned char len16[2];
+		getUint16Arr(len16, crypto_sign_BYTES);
+		memcpy(iter, len16, 2);
+		iter += 2;
+
+		memcpy(iter, sig, crypto_sign_BYTES);
+		iter += crypto_sign_BYTES;
+
+		*iter = 22;
+		iter += 1;
+
+		unsigned char nouce[crypto_aead_chacha20poly1305_IETF_NPUBBYTES];
+		generateNouce(nouce, server_write_iv, nouceCounter);
+
+		record.length = sizeof(fragment) + crypto_aead_chacha20poly1305_IETF_ABYTES;
+		record.type = 23;
+		getUint16Arr(len16, record.length);
+		unsigned char additional_data[] = {record.type, 0x03, 0x03, len16[0], len16[1]};
+		printf("record length: %d\n",record.length);
+
+		unsigned char cipher[sizeof(fragment) + crypto_aead_chacha20poly1305_IETF_ABYTES];
+		unsigned long long clen;
+
+		crypto_aead_chacha20poly1305_ietf_encrypt(cipher, &clen,
+								fragment, sizeof(fragment),
+								additional_data, sizeof(additional_data),
+								NULL,
+								nouce, server_write_key);
+
+		write(acc, additional_data, sizeof(additional_data));
+		write(acc, cipher, clen);
+
+		printf("verifyied!\n");
 
 
+		
 	}
 
 	printf("sleeping for 2 second...\n");
