@@ -758,7 +758,7 @@ int main(){
 		
 
 	}
-	sleep(1);
+	//sleep(1);
 	//certverify
 	if(1){
 		printf("crypto_sign_SECRETKEYBYTES: %d\n",crypto_sign_SECRETKEYBYTES);
@@ -840,6 +840,8 @@ int main(){
 		*iter = 22;
 		iter += 1;
 
+		crypto_hash_sha256_update(&tHash, fragment, sizeof(fragment)-1);
+
 		unsigned char nouce[crypto_aead_chacha20poly1305_IETF_NPUBBYTES];
 		generateNouce(nouce, server_write_iv, nouceCounter);
 
@@ -862,9 +864,72 @@ int main(){
 		write(acc, cipher, clen);
 
 		printf("verifyied!\n");
+		nouceCounter += 1; 
 
 
 		
+	}
+	sleep(1);
+	if(1){
+		unsigned char finished_key[32];
+		HKDF_Expand_Label(finished_key, server_hs_traffic_secret, "finished", sizeof("finished")-1,NULL,0,32);
+
+		unsigned char verify_data[32];
+
+		unsigned char in[32];
+		getHash(&tHash, in);
+
+		crypto_auth_hmacsha256(verify_data,
+					in, sizeof(in),
+					finished_key);
+
+		unsigned int padding_length = 20;
+
+		unsigned char fragment[4 + 32 + 1 + padding_length];
+		unsigned char *iter = fragment;
+
+		//handshake type for finished
+		*iter = 20; iter += 1;
+
+		unsigned char len24[3];
+		getUint24(len24, 32);
+		memcpy(iter, len24, 3);
+		iter += 3;
+
+		memcpy(iter, verify_data, 32);
+		iter += 32;
+
+		*iter = 22; iter += 1;
+
+		for(int i = 0; i<32;i++){
+			*iter = 0;
+			iter += 1;
+		}
+
+		record.type = 23;
+		record.length = sizeof(fragment) + crypto_aead_chacha20poly1305_IETF_ABYTES;
+
+		unsigned char len16[2];
+		getUint16Arr(len16, record.length);
+
+		unsigned char additional_data[] = {record.type, 0x03, 0x03, len16[0], len16[1]};
+
+		unsigned char cipher[record.length];
+		unsigned long long clen;
+
+		unsigned char nouce[crypto_aead_chacha20poly1305_IETF_NPUBBYTES];
+		generateNouce(nouce, server_write_iv, nouceCounter);
+
+		crypto_aead_chacha20poly1305_ietf_encrypt(cipher, &clen,
+								fragment, sizeof(fragment),
+								additional_data, sizeof(additional_data),
+								NULL, nouce, server_write_key);
+
+		nouceCounter += 1;
+
+		write(acc, additional_data, sizeof(additional_data));
+		write(acc, cipher, record.length);
+			
 	}
 
 	printf("sleeping for 2 second...\n");
