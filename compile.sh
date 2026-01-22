@@ -1,1 +1,1 @@
-gcc main.c hkdf.h -L /home/wnj/libsodium-stable/src/libsodium/.libs/ -lsodium -lssl -lcrypto -o main
+gcc main.c tls_crypto.c -L /home/wnj/libsodium-stable/src/libsodium/.libs/ -lsodium -o main

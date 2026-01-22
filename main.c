@@ -1,4 +1,3 @@
-#include "hkdf.h"
 #include <string.h>
 #include <unistd.h>
 #include <netinet/in.h>
@@ -9,6 +8,7 @@
 #include <sodium.h>
 #include <math.h>
 #include <ctype.h>
+#include "tls_crypto.h"
 
 
 struct TLSPlaintext{
@@ -103,54 +103,6 @@ void generateNouce(unsigned char *out, unsigned char *iv, uint8_t counter){
 		printf("%d ",i);
 	} printf("\n");
 	out[11] = iv[11] ^ counter;
-}
-void HKDF_Expand_Label(unsigned char *outPtr, unsigned char Secret[], unsigned char Label[], uint8_t label_length, unsigned char Contex[], uint8_t contex_length, uint16_t Length){
-	unsigned char expandLabel[6+label_length];
-	unsigned char tls13[] = {'t','l','s','1','3',' '};
-	//compinde Lable and tls13
-	//printf("--- start label ---\n-");
-	for(int i = 0; i<sizeof(expandLabel);i++){
-		//printf(" %d ",i);
-		if(i>=6){expandLabel[i] = Label[i-6];}
-		else{expandLabel[i] = tls13[i];}
-		//printf("%c", expandLabel[i]);
-	}
-	//printf("-\n--- end label ---\n");
-
-	unsigned char l[2+1+sizeof(expandLabel)+1+contex_length];
-
-	//printf("label_elngth: %d expandLabel size: %d l size: %d\n", label_length, sizeof(expandLabel), sizeof(l));
-
-	uint16_t c = 0;
-
-	uint16_t nol = htons(Length);
-	//printf("before: %02x after: %02x | before: b1:%02x b2:%02x after: b1:%02x b2:%02x\n",Length,nol,(Length>>0)&0xFF,(Length>>8)&0xFF,(nol>>0)&0xFF,(nol>>8)&0xFF);
-
-
-	l[c] =  (nol>>0)&0xFF; l[c+1] = (nol>>8)&0xFF; c+=2;
-	l[c] = (uint8_t) (6+label_length) & 0xFF; c++;
-	//printf("expaned label into l: \"");
-	for(int i = 0; i<sizeof(expandLabel);i++){
-		l[i+c] = expandLabel[i];
-		//printf("%c",l[i+c]);
-	} c += sizeof(expandLabel); //printf("\"\n");
-	
-	//printf("Contex: 0x");
-	l[c] = (contex_length) & 0xFF; c++;
-	for(int i = 0; i<contex_length;i++){
-		l[c+i] = Contex[i];
-		//printf("%02x", Contex[i]);
-	} c+= contex_length; //printf("\n");
-
-	crypto_kdf_hkdf_sha256_expand(outPtr, Length, l, sizeof(l), Secret);
-
-	//what the hell am i putting into this function debug part
-	//printf("the hell i am printing: \"");
-	//for(int i = 0; i<sizeof(l);i++){
-		//unsigned char cToPrint = l[i];
-		//if(isprint(cToPrint)){printf("%c",cToPrint);}
-		//else{printf("(0x%02x)",cToPrint);}
-	//}printf("\"\n");
 }
 void update_hash_uint16(crypto_hash_sha256_state *state, uint16_t num){
 	uint16_t out = htons(num);
@@ -551,7 +503,6 @@ int main(){
 	for(int i = 0; i<32;i++){printf("%02x",early_secret[i]);}printf("\n");
 
 	unsigned char derived_secret[32] = {0x67};
-	unsigned char derived_secret_test[32];
 	size_t hash_length_test = 32;
 
 	unsigned char empty_hash[32];
@@ -559,26 +510,15 @@ int main(){
 	printf("empty_hash: ");for(int i = 0; i<32;i++){printf("%02x",empty_hash[i]);}printf("\n");
 
 	HKDF_Expand_Label(derived_secret, early_secret, "derived", sizeof("derived")-1, empty_hash, 32, 32);
-	hkdf_expand_label(early_secret, sizeof(early_secret),
-				"derived", sizeof("derived")-1,
-				empty_hash, 32,
-				derived_secret_test, &hash_length_test);
 
 	printf("derived_secret     : ");for(int i = 0; i<32;i++){			  printf("%02x",derived_secret[i]);}     printf("\n");
-	printf("derived_secret_test: ");for(int i = 0; i<sizeof(derived_secret_test);i++){printf("%02x",derived_secret_test[i]);}printf("\n");
 
 	printf("handshake_secert\n");
 	unsigned char handshake_secret[crypto_kdf_hkdf_sha256_KEYBYTES];
 	crypto_kdf_hkdf_sha256_extract(handshake_secret, derived_secret, sizeof(derived_secret), sharedsecret, sizeof(sharedsecret));
 
 	unsigned char server_hs_traffic_secret[32];
-	unsigned char server_hs_traffic_secret_test[32];
 	HKDF_Expand_Label(server_hs_traffic_secret, handshake_secret,"s hs traffic", sizeof("s hs traffic")-1, outHash, sizeof(outHash), sizeof(server_hs_traffic_secret));
-	
-	hkdf_expand_label(handshake_secret,sizeof(handshake_secret),
-				"s hs traffic", sizeof("s hs traffic")-1,
-				outHash, sizeof(outHash),
-				server_hs_traffic_secret_test, &hash_length_test);
 
 	//printf("derived secret[0]: %x\n",derived_secret[0]);
 	//color
@@ -587,8 +527,6 @@ int main(){
 
 	printf("\x1b[31m"); // red
 	printf("server hs tf secert     : ");for(int i = 0; i<32; i++){printf("%02x", server_hs_traffic_secret[i]);     } printf("\n"); printf("\x1b[0m"); // color reset
-	printf("\x1b[33m");//yellow
-	printf("server_hs_tf_secret_test: ");for(int i = 0; i<32; i++){printf("%02x", server_hs_traffic_secret_test[i]);} printf("\n"); printf("\x1b[0m");//color reset
 
 
 	uint8_t nouceCounter = 0;
