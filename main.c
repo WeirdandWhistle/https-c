@@ -823,7 +823,8 @@ int main(){
 
 		unsigned int padding_length = 20;
 
-		unsigned char fragment[4 + 32 + 1 + padding_length];
+		//unsigned char fragment[4 + 32 + 1 + padding_length];
+		unsigned char fragment[4+32];
 		unsigned char *iter = fragment;
 
 		//handshake type for finished
@@ -836,7 +837,7 @@ int main(){
 
 		memcpy(iter, verify_data, 32);
 		iter += 32;
-
+		/*
 		*iter = 22; iter += 1;
 
 		for(int i = 0; i<padding_length;i++){
@@ -858,8 +859,6 @@ int main(){
 		unsigned char cipher[record.length];
 		unsigned long long clen;
 
-		unsigned char nouce[crypto_aead_chacha20poly1305_IETF_NPUBBYTES];
-		generateNouce(nouce, server_write_iv, nouceCounter);
 
 		crypto_aead_chacha20poly1305_ietf_encrypt(cipher, &clen,
 								fragment, sizeof(fragment),
@@ -867,9 +866,22 @@ int main(){
 								NULL, nouce, server_write_key);
 
 		nouceCounter += 1;
+		*/
 
-		write(acc, additional_data, sizeof(additional_data));
-		write(acc, cipher, record.length);
+		unsigned char nouce[crypto_aead_chacha20poly1305_IETF_NPUBBYTES];
+		generateNouce(nouce, server_write_iv, nouceCounter);
+
+		int length = 5 + 4 + 32 + 1 + padding_length + crypto_aead_chacha20poly1305_IETF_ABYTES;
+		unsigned char out[length];
+		unsigned long long written;
+	
+		create_record(out, &written, fragment, sizeof(fragment), 22, padding_length, server_write_key, nouce);
+
+		sleep(1);
+		write(acc, out, sizeof(out));
+
+		//write(acc, additional_data, sizeof(additional_data));
+		//write(acc, cipher, record.length);
 			
 	}
 
@@ -877,7 +889,14 @@ int main(){
 	//sleep(2);
 	
 	unsigned char derived_secret_2[32];
-	HKDF_Expand_Label(derived_secret_2, handshake_secret, "derived");
+	HKDF_Expand_Label(derived_secret_2, handshake_secret, "derived", sizeof("derived")-1, empty_hash, sizeof(empty_hash),32);
+
+	unsigned char master_secret[32];
+	crypto_kdf_hkdf_sha256_extract(master_secret,
+					derived_secret_2, 32,
+					ZEROARRAY, 32);
+
+	printArrayHex("Master Secret",master_secret,32);
 
 
 
