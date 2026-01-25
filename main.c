@@ -839,13 +839,16 @@ int main(){
 
 		*iter = 22; iter += 1;
 
-		for(int i = 0; i<32;i++){
+		for(int i = 0; i<padding_length;i++){
 			*iter = 0;
 			iter += 1;
-		}
+			printf("%d ",i);
+		}printf("\n");
 
 		record.type = 23;
 		record.length = sizeof(fragment) + crypto_aead_chacha20poly1305_IETF_ABYTES;
+
+		crypto_hash_sha256_update(&tHash, fragment, sizeof(fragment)-1-padding_length);
 
 		unsigned char len16[2];
 		getUint16Arr(len16, record.length);
@@ -870,8 +873,11 @@ int main(){
 			
 	}
 
-	printf("sleeping for 2 second...\n");
-	sleep(2);
+	//printf("sleeping for 2 second...\n");
+	//sleep(2);
+	
+	unsigned char derived_secret_2[32];
+	HKDF_Expand_Label(derived_secret_2, handshake_secret, "derived");
 
 
 
