@@ -38,3 +38,48 @@ void HKDF_Expand_Label(unsigned char *outPtr, unsigned char *Secret, unsigned ch
 
 	crypto_kdf_hkdf_sha256_expand(outPtr, Length, l, sizeof(l), Secret);
 }
+
+int create_record(unsigned char *outPtr, unsigned long long *out_len, unsigned char *message, unsigned long long mlen, unsigned char type, int padding_length, unsigned char *k, unsigned char *nouce){
+	
+	if(mlen + 1 + padding_length + crypto_aead_chacha20poly1305_IETF_ABYTES > pow(2,14)){
+		return 1;
+	}
+	uint16_t record_length = mlen + 1 + + padding_length + crypto_aead_chacha20poly1305_IETF_ABYTES;
+	uint16_t big_edian = htons(record_length);
+
+	unsigned char ad[] = {23, 0x03, 0x03, (big_edian)&0xFF,(big_edian>>8)&0xFF};
+
+	unsigned char *cipher = malloc(record_length);
+	unsigned long long clen;
+
+	unsigned char *plaintext = malloc(mlen + 1 + padding_length);
+
+	unsigned char *iter = plaintext;
+
+	memcpy(iter, message, mlen);
+	iter += mlen;
+
+	*iter = type; iter += 1;
+
+	for(int i = 0; i < padding_length;i++){
+		*iter = 0;
+		iter += 1;
+	}
+
+	crypto_aead_chacha20poly1305_ietf_encrypt(cipher, &clen,
+							plaintext, mlen + 1 + padding_length,
+							ad, sizeof(ad),
+							NULL, nouce, k);
+
+	iter = outPtr;
+
+	memcpy(iter, ad, sizeof(ad));
+	iter += sizeof(ad);
+
+	memcpy(iter, cipher, clen);	
+
+	free(cipher);
+	free(plaintext);
+
+	return 0;
+}
