@@ -9,6 +9,7 @@
 #include <math.h>
 #include <ctype.h>
 #include "tls_crypto.h"
+#include "tls_alert.h"
 
 
 struct TLSPlaintext{
@@ -908,8 +909,38 @@ int main(){
 
 	printArrayHex("serever app secret", server_application_traffic_secret, 32);
 
+	HKDF_Expand_Label(server_write_key, server_application_traffic_secret, "key", 3, NULL, 0, crypto_aead_chacha20poly1305_IETF_KEYBYTES);
+	HKDF_Expand_Label(server_write_iv, server_application_traffic_secret, "iv", 2, NULL, 0, crypto_aead_chacha20poly1305_IETF_NPUBBYTES);
 
 
+	nouceCounter = 0;
+	sleep(1);
+	if(1){
+
+		unsigned char fragment[] = {'t','l','s',' ','1','.','3'};
+		int len;
+		int padding_length = 0;
+		create_record_length(&len, sizeof(fragment), padding_length);
+
+		unsigned char nouce[crypto_aead_chacha20poly1305_IETF_NPUBBYTES];
+		generateNouce(nouce, server_write_iv, nouceCounter);
+		nouceCounter += 1;
+
+		unsigned char out[len];
+		unsigned long long written;
+
+		create_record(out, &written, fragment, sizeof(fragment), 23, padding_length, server_write_key, nouce);
+
+		write(acc, out, len);
+		printf("sernt some application data...\n");
+		sleep(1);
+
+
+	}
+
+	unsigned char close_alert_close[7];
+	alert_get_close(close_alert_close);
+	write(acc, close_alert_close, 7);
 
 
 	free(supported_versions.extension_data);

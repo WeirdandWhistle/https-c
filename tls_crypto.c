@@ -44,7 +44,7 @@ int create_record(unsigned char *outPtr, unsigned long long *out_len, unsigned c
 	if(mlen + 1 + padding_length + crypto_aead_chacha20poly1305_IETF_ABYTES > pow(2,14)){
 		return 1;
 	}
-	uint16_t record_length = mlen + 1 + + padding_length + crypto_aead_chacha20poly1305_IETF_ABYTES;
+	uint16_t record_length = mlen + 1 + padding_length + crypto_aead_chacha20poly1305_IETF_ABYTES;
 	uint16_t big_edian = htons(record_length);
 
 	unsigned char ad[] = {23, 0x03, 0x03, (big_edian)&0xFF,(big_edian>>8)&0xFF};
@@ -82,4 +82,8 @@ int create_record(unsigned char *outPtr, unsigned long long *out_len, unsigned c
 	free(plaintext);
 
 	return 0;
+}
+
+void create_record_length(int *length, int mes_len, int padding_len){
+	*length = 1 + 2 + 2 + mes_len + 1 + padding_len + crypto_aead_chacha20poly1305_IETF_ABYTES;
 }
