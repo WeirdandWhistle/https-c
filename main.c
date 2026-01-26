@@ -868,6 +868,8 @@ int main(){
 		nouceCounter += 1;
 		*/
 
+		crypto_hash_sha256_update(&tHash, fragment, sizeof(fragment));
+
 		unsigned char nouce[crypto_aead_chacha20poly1305_IETF_NPUBBYTES];
 		generateNouce(nouce, server_write_iv, nouceCounter);
 
@@ -877,7 +879,7 @@ int main(){
 	
 		create_record(out, &written, fragment, sizeof(fragment), 22, padding_length, server_write_key, nouce);
 
-		sleep(1);
+		//sleep(1);
 		write(acc, out, sizeof(out));
 
 		//write(acc, additional_data, sizeof(additional_data));
@@ -897,6 +899,16 @@ int main(){
 					ZEROARRAY, 32);
 
 	printArrayHex("Master Secret",master_secret,32);
+
+	getHash(&tHash, outHash);
+
+
+	unsigned char server_application_traffic_secret[32];
+	HKDF_Expand_Label(server_application_traffic_secret, master_secret, "s ap traffic", sizeof("s ap traffic")-1, outHash, 32, 32);
+
+	printArrayHex("serever app secret", server_application_traffic_secret, 32);
+
+
 
 
 
