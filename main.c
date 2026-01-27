@@ -101,8 +101,8 @@ void getHash(crypto_hash_sha256_state *ptr, unsigned char *out){
 void generateNouce(unsigned char *out, unsigned char *iv, uint8_t counter){
 	for(int i = 0; i<=10;i++){
 		out[i] = iv[i];
-		printf("%d ",i);
-	} printf("\n");
+		//printf("%d ",i);
+	} //printf("\n");
 	out[11] = iv[11] ^ counter;
 }
 void update_hash_uint16(crypto_hash_sha256_state *state, uint16_t num){
@@ -119,6 +119,38 @@ void update_hash_uint32(crypto_hash_sha256_state *state, uint32_t num){
 	uint32_t out = htonl(num);
 	unsigned char buf[] =  {out&0xFF,(out>>8)&0xFF,(out>>16)&0xFF,(out>>24)&0xFF};
 	crypto_hash_sha256_update(state,buf,4);
+}
+void dump_socket(int socket){
+	int error_len = 0;
+
+	fd_set set;
+	FD_ZERO(&set);
+	FD_SET(socket, &set);
+
+	struct timeval timeout;
+	timeout.tv_sec = 0;
+	timeout.tv_usec = 1000;
+
+	printf("read hex dump!\n");
+	while(error_len<5){
+		unsigned char r;
+		int error;
+		error = select(socket + 1, &set, NULL, NULL, &timeout);
+		if(error == -1){
+			error_len += 1;
+			sleep(0.1);
+			printf("error |\n");
+
+		} else if(error == 0){
+			error_len += 1;
+			sleep(0.1);
+			printf("timeout |\n");
+		} else {
+			read(socket, &r, 1);
+			printf("%02x ", r);
+		}
+	}
+
 }
 int main(){
 
@@ -526,7 +558,10 @@ int main(){
 
 	printf("\x1b[31m"); // red
 	printf("server hs tf secert     : ");for(int i = 0; i<32; i++){printf("%02x", server_hs_traffic_secret[i]);     } printf("\n"); printf("\x1b[0m"); // color reset
-
+																			   
+	
+	unsigned char client_hs_traffic_secret[32];
+	HKDF_Expand_Label(client_hs_traffic_secret, handshake_secret, "c hs traffic", sizeof("c hs traffic")-1, outHash, sizeof(outHash), 32);
 
 	uint8_t nouceCounter = 0;
 
@@ -535,6 +570,15 @@ int main(){
 
 	HKDF_Expand_Label(server_write_key, server_hs_traffic_secret, "key", 3, NULL, 0, crypto_aead_chacha20poly1305_IETF_KEYBYTES);
 	HKDF_Expand_Label(server_write_iv, server_hs_traffic_secret, "iv", 2, NULL, 0, crypto_aead_chacha20poly1305_IETF_NPUBBYTES);
+
+	unsigned char client_write_key[crypto_aead_chacha20poly1305_IETF_KEYBYTES];
+	unsigned char client_write_iv[crypto_aead_chacha20poly1305_IETF_NPUBBYTES];
+
+	HKDF_Expand_Label(client_write_key, client_hs_traffic_secret, "key", 3, NULL, 0, crypto_aead_chacha20poly1305_IETF_KEYBYTES);
+	HKDF_Expand_Label(client_write_iv , client_hs_traffic_secret, "iv", 2, NULL, 0, crypto_aead_chacha20poly1305_IETF_NPUBBYTES);
+
+
+
 
 
 	//change cipher spec. for TLS1.2 compaitiblity reasons.
@@ -596,7 +640,9 @@ int main(){
 		printf("bytes encrypted in to cipher: %d\n",clen_p);
 
 	}
-	//sleep(3);
+	//dump_socket(acc);
+
+	sleep(1);
 	//Certificate
 	if(1){
 		record.length = 0;
@@ -703,7 +749,25 @@ int main(){
 		
 
 	}
-	//sleep(3);
+	//dump_socket(acc);
+	
+	sleep(1);
+	if(1){
+		unsigned char *mes;
+		unsigned long long mes_length;
+
+		unsigned char nouce[crypto_aead_chacha20poly1305_IETF_NPUBBYTES];
+		generateNouce(nouce, client_write_iv, nouceCounter);
+		nouceCounter += 1;
+
+		int ret_code = get_record_socket(mes, &mes_length, acc, nouce, client_write_iv);
+
+		printf("return code: %d \n",ret_code);
+		printf("mes len %d ",mes_length);
+		printArrayHex("mes", mes, mes_length);
+
+		free(mes);
+	}
 	//certverify
 	if(1){
 		printf("crypto_sign_SECRETKEYBYTES: %d\n",crypto_sign_SECRETKEYBYTES);
@@ -814,7 +878,7 @@ int main(){
 
 		
 	}
-	//sleep(1);
+	sleep(1);
 	if(1){
 		unsigned char finished_key[32];
 		HKDF_Expand_Label(finished_key, server_hs_traffic_secret, "finished", sizeof("finished")-1,NULL,0,32);
@@ -844,36 +908,6 @@ int main(){
 
 		memcpy(iter, verify_data, 32);
 		iter += 32;
-		/*
-		*iter = 22; iter += 1;
-
-		for(int i = 0; i<padding_length;i++){
-			*iter = 0;
-			iter += 1;
-			printf("%d ",i);
-		}printf("\n");
-
-		record.type = 23;
-		record.length = sizeof(fragment) + crypto_aead_chacha20poly1305_IETF_ABYTES;
-
-		crypto_hash_sha256_update(&tHash, fragment, sizeof(fragment)-1-padding_length);
-
-		unsigned char len16[2];
-		getUint16Arr(len16, record.length);
-
-		unsigned char additional_data[] = {record.type, 0x03, 0x03, len16[0], len16[1]};
-
-		unsigned char cipher[record.length];
-		unsigned long long clen;
-
-
-		crypto_aead_chacha20poly1305_ietf_encrypt(cipher, &clen,
-								fragment, sizeof(fragment),
-								additional_data, sizeof(additional_data),
-								NULL, nouce, server_write_key);
-
-		nouceCounter += 1;
-		*/
 
 		crypto_hash_sha256_update(&tHash, fragment, sizeof(fragment));
 
@@ -920,10 +954,14 @@ int main(){
 
 
 	nouceCounter = 0;
-	//sleep(4);
-	if(1){
+	sleep(1);
+	
+	//nouceCounter += 2;
+	
+	if(1){	
+		sleep(0.5);
 
-		unsigned char fragment[] = {'t','l','s',' ','1','.','3'};
+		unsigned char fragment[] = {'t','l','s',' ','1','.','3','\n'};
 		int len;
 		int padding_length = 0;
 		create_record_length(&len, sizeof(fragment), padding_length);
@@ -939,14 +977,83 @@ int main(){
 
 		write(acc, out, len);
 		printf("sernt some application data...\n");
-		sleep(1);
 
 
 	}
+	
+	if(1){
+		printf("sending close alert!\n");
+		unsigned char close_alert_close[2];
+		alert_get_close(close_alert_close);
+		//write(acc, close_alert_close, 7);
 
-	unsigned char close_alert_close[7];
-	alert_get_close(close_alert_close);
-	write(acc, close_alert_close, 7);
+		int len;
+		create_record_length(&len, 2, 0);
+		unsigned char out[len];
+
+		unsigned char nouce[crypto_aead_chacha20poly1305_IETF_NPUBBYTES];
+		generateNouce(nouce, server_write_iv, nouceCounter);
+		nouceCounter += 1;
+
+		create_record(out, NULL, close_alert_close, 2, 21, 0, server_write_key, nouce);
+		printf("created close alert!\n");
+		int ret = write(acc, out, sizeof(out));
+		printf("closed alert\n");
+	}
+
+	//sleep(1);
+
+	getHash(&tHash, outHash);
+
+	unsigned char client_application_traffic_secret[32];
+	HKDF_Expand_Label(client_application_traffic_secret, master_secret,"c ap traffic", sizeof("c ap traffic")-1, outHash, 32, 32);
+      //HKDF_Expand_Label(server_application_traffic_secret, master_secret, "s ap trafic", sizeof("s ap traffic")-1, outHash, 32, 32);
+
+	HKDF_Expand_Label(client_write_key, client_application_traffic_secret, "key", 3, NULL, 0, crypto_aead_chacha20poly1305_IETF_KEYBYTES);
+	HKDF_Expand_Label(client_write_iv, client_application_traffic_secret, "iv", 2, NULL, 0, crypto_aead_chacha20poly1305_IETF_NPUBBYTES);
+
+
+	if(0){
+		unsigned char record_type;
+		unsigned char legacy_version[2];
+		unsigned char length[2];
+
+		read(acc, &record_type, 1);
+		read(acc, legacy_version, 2);
+		read(acc, length, 2);
+
+		uint16_t parsed_len = ((length[0]<<8) | length[1]);
+		printf("paresed length %d / ",parsed_len);
+		printArrayHex("high bytes order len", length, 2);
+
+		unsigned char *buffer = malloc(parsed_len);
+
+		read(acc, buffer, parsed_len);
+
+		unsigned char ad[] = {record_type, legacy_version[0], legacy_version[1], length[0], length[1]};
+
+		unsigned char m[parsed_len - crypto_aead_chacha20poly1305_IETF_ABYTES];
+		unsigned long long written;
+
+		unsigned char nouce[crypto_aead_chacha20poly1305_IETF_NPUBBYTES];
+		generateNouce(nouce, client_write_iv, nouceCounter);
+
+		int ret = crypto_aead_chacha20poly1305_ietf_decrypt(m, &written,
+									NULL,
+									buffer, parsed_len,
+									ad, sizeof(ad),
+									nouce, client_write_key);
+
+		printf("return from decrypt value %d\n",ret);
+		printf("amout to display %d & ",written);
+		printArrayHex("m",m,written);
+
+		free(buffer);
+
+
+
+	}
+	dump_socket(acc);	
 
 
 	free(supported_versions.extension_data);
