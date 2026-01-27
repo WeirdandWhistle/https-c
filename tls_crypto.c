@@ -87,3 +87,45 @@ int create_record(unsigned char *outPtr, unsigned long long *out_len, unsigned c
 void create_record_length(int *length, int mes_len, int padding_len){
 	*length = 1 + 2 + 2 + mes_len + 1 + padding_len + crypto_aead_chacha20poly1305_IETF_ABYTES;
 }
+
+int get_record_socket(unsigned char *outPtr, unsigned long long *out_len, int fd, unsigned char *nouce, unsigned char *k){
+	unsigned char type;
+	unsigned char legacy_version[2];
+	unsigned char length[2];
+	uint16_t len;
+
+	read(fd, &type, 1);
+	read(fd, legacy_version, 2);
+	read(fd, length, 2);
+
+	len = (length[0] << 8) | (length[1]);
+	if(len > pow(2,14)){
+		printf("too much record!");
+		return 1;
+	}
+
+	unsigned char *buffer = malloc(len);
+
+	int read_on_wire = read(fd, buffer, len);
+	if(read_on_wire == -1){
+		printf("read(); failed!");
+		return 1;
+	} else if(read_on_wire != len){
+		printf("HEARTBLEED atempt! read(%d) != length field(&d)\n", read_on_wire, len);
+		return 1;
+	}
+
+	unsigned char ad[] = {type, legacy_version[0], legacy_version[1], length[0], length[1]};
+
+	outPtr = malloc(len);
+
+	int decryption = crypto_aead_chacha20poly1305_ietf_decrypt(outPtr, out_len,
+									NULL,
+									buffer, len,
+									ad, sizeof(ad),
+									nouce, k);
+
+		
+	free(buffer);
+	return decryption;
+}

@@ -7,4 +7,6 @@ int create_record(unsigned char *outPtr, unsigned long long *out_len, unsigned c
 
 void create_record_length(int *length, int mes_len, int padding_len);
 
+int get_record_socket(unsigned char *outPtr, unsigned long long *out_len, int fd, unsigned char *k, unsigned char *nouce);
+
 #endif
