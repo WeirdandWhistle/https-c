@@ -523,8 +523,6 @@ int main(){
 
 	//printf("derived secret[0]: %x\n",derived_secret[0]);
 	//color
-	
-
 
 	printf("\x1b[31m"); // red
 	printf("server hs tf secert     : ");for(int i = 0; i<32; i++){printf("%02x", server_hs_traffic_secret[i]);     } printf("\n"); printf("\x1b[0m"); // color reset
@@ -539,7 +537,15 @@ int main(){
 	HKDF_Expand_Label(server_write_iv, server_hs_traffic_secret, "iv", 2, NULL, 0, crypto_aead_chacha20poly1305_IETF_NPUBBYTES);
 
 
+	//change cipher spec. for TLS1.2 compaitiblity reasons.
+	unsigned char change_cipher_spec[] = {0x14, 0x03, 0x03, 0x00, 0x01, 0x01};
+	write(acc, change_cipher_spec, sizeof(change_cipher_spec));
 
+	unsigned char rando_shit[] = {1};
+
+	//crypto_hash_sha256_update(&tHash, rando_shit, 1);
+	
+	//sleep(3);
 	if(1){//for reuasl of important names
 		//ENCRYPTED EXTENSION none
 		//TLSCipherText & addiontal data
@@ -590,7 +596,7 @@ int main(){
 		printf("bytes encrypted in to cipher: %d\n",clen_p);
 
 	}
-	//sleep(1);
+	//sleep(3);
 	//Certificate
 	if(1){
 		record.length = 0;
@@ -697,7 +703,7 @@ int main(){
 		
 
 	}
-	//sleep(1);
+	//sleep(3);
 	//certverify
 	if(1){
 		printf("crypto_sign_SECRETKEYBYTES: %d\n",crypto_sign_SECRETKEYBYTES);
@@ -808,7 +814,7 @@ int main(){
 
 		
 	}
-	sleep(1);
+	//sleep(1);
 	if(1){
 		unsigned char finished_key[32];
 		HKDF_Expand_Label(finished_key, server_hs_traffic_secret, "finished", sizeof("finished")-1,NULL,0,32);
@@ -914,7 +920,7 @@ int main(){
 
 
 	nouceCounter = 0;
-	sleep(1);
+	//sleep(4);
 	if(1){
 
 		unsigned char fragment[] = {'t','l','s',' ','1','.','3'};
