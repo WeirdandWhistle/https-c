@@ -564,6 +564,7 @@ int main(){
 	HKDF_Expand_Label(client_hs_traffic_secret, handshake_secret, "c hs traffic", sizeof("c hs traffic")-1, outHash, sizeof(outHash), 32);
 
 	uint8_t nouceCounter = 0;
+	uint8_t nouce_counter_client = 0;
 
 	unsigned char server_write_key[crypto_aead_chacha20poly1305_IETF_KEYBYTES];//should be 32
 	unsigned char server_write_iv[crypto_aead_chacha20poly1305_IETF_KEYBYTES];
@@ -572,7 +573,7 @@ int main(){
 	HKDF_Expand_Label(server_write_iv, server_hs_traffic_secret, "iv", 2, NULL, 0, crypto_aead_chacha20poly1305_IETF_NPUBBYTES);
 
 	unsigned char client_write_key[crypto_aead_chacha20poly1305_IETF_KEYBYTES];
-	unsigned char client_write_iv[crypto_aead_chacha20poly1305_IETF_NPUBBYTES];
+	unsigned char client_write_iv[crypto_aead_chacha20poly1305_IETF_KEYBYTES];
 
 	HKDF_Expand_Label(client_write_key, client_hs_traffic_secret, "key", 3, NULL, 0, crypto_aead_chacha20poly1305_IETF_KEYBYTES);
 	HKDF_Expand_Label(client_write_iv , client_hs_traffic_secret, "iv", 2, NULL, 0, crypto_aead_chacha20poly1305_IETF_NPUBBYTES);
@@ -744,7 +745,7 @@ int main(){
 		free(fragment);
 		free(cert_data);
 
-		printf("everything on wire...\n");
+		printf("CERTIFICATE: everything on wire...\n");
 		nouceCounter += 1;
 		
 
@@ -757,8 +758,8 @@ int main(){
 		unsigned long long mes_length;
 
 		unsigned char nouce[crypto_aead_chacha20poly1305_IETF_NPUBBYTES];
-		generateNouce(nouce, client_write_iv, nouceCounter);
-		nouceCounter += 1;
+		generateNouce(nouce, client_write_iv, nouce_counter_client);
+		nouce_counter_client += 1;
 
 		int ret_code = get_record_socket(mes, &mes_length, acc, nouce, client_write_iv);
 
