@@ -100,7 +100,7 @@ int get_record_socket(unsigned char *outPtr, unsigned long long *out_len, int fd
 
 	len = (length[0] << 8) | (length[1]);
 	if(len > pow(2,14)){
-		printf("too much record!");
+		printf("too much record!\n");
 		return 1;
 	}
 
@@ -108,7 +108,7 @@ int get_record_socket(unsigned char *outPtr, unsigned long long *out_len, int fd
 
 	int read_on_wire = read(fd, buffer, len);
 	if(read_on_wire == -1){
-		printf("read(); failed!");
+		printf("read(); failed!\n");
 		return 1;
 	} else if(read_on_wire != len){
 		printf("HEARTBLEED atempt! read(%d) != length field(&d)\n", read_on_wire, len);
