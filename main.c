@@ -10,6 +10,7 @@
 #include <ctype.h>
 #include "tls_crypto.h"
 #include "tls_alert.h"
+#include "uECC.h"
 
 
 struct TLSPlaintext{
@@ -153,7 +154,15 @@ void dump_socket(int socket){
 
 }
 int main(){
+	/*
+	uECC_Curve curve;
+	curve = uECC_secp256r1();
 
+	int ECDSA_private_key_size = uECC_curve_private_key_size(curve);
+	int ECDSA_public_key_size = uECC_curve_public_key_size(curve);
+	printf("private key size for secp256r1 %d\n",ECDSA_private_key_size);
+	printf("public key size for secp256r1 %d\n", ECDSA_public_key_size);
+	*/
 	unsigned char abc[] = "123abc";
 
 	printf("string %s length of that string %d\n",abc, sizeof(abc));
@@ -754,20 +763,31 @@ int main(){
 	
 	sleep(1);
 	if(1){
-		unsigned char *mes;
+		unsigned char *mes = NULL;
 		unsigned long long mes_length;
 
 		unsigned char nouce[crypto_aead_chacha20poly1305_IETF_NPUBBYTES];
 		generateNouce(nouce, client_write_iv, nouce_counter_client);
 		nouce_counter_client += 1;
 
-		int ret_code = get_record_socket(mes, &mes_length, acc, nouce, client_write_iv);
+		int ret_code = get_record_socket(&mes, &mes_length, acc, nouce, client_write_key);
+
+		if(mes == NULL){
+			printf("mes is a NULL pointer!\n");
+		}
 
 		printf("return code: %d \n",ret_code);
-		printf("mes len %d ",mes_length);
-		printArrayHex("mes", mes, mes_length);
+		printf("mes len %lu\n", mes_length);
+		//printArrayHex("mes", mes, mes_length);
+		//printf("seg fault on a comment?\n");
+		
+		printf("the messae: \n");
+		for(int i = 0; i <mes_length;i++){
+			printf("%02x ",mes[i]);
+		}printf("\n");
 
 		free(mes);
+		//printf("I know a 'free' is not causing a seg fault. Right? Right...\n");
 	}
 	//certverify
 	if(1){

@@ -88,7 +88,7 @@ void create_record_length(int *length, int mes_len, int padding_len){
 	*length = 1 + 2 + 2 + mes_len + 1 + padding_len + crypto_aead_chacha20poly1305_IETF_ABYTES;
 }
 
-int get_record_socket(unsigned char *outPtr, unsigned long long *out_len, int fd, unsigned char *nouce, unsigned char *k){
+int get_record_socket(unsigned char **outPtr, unsigned long long *out_len, int fd, unsigned char *nouce, unsigned char *k){
 	unsigned char type;
 	unsigned char legacy_version[2];
 	unsigned char length[2];
@@ -98,11 +98,14 @@ int get_record_socket(unsigned char *outPtr, unsigned long long *out_len, int fd
 	read(fd, legacy_version, 2);
 	read(fd, length, 2);
 
+
 	len = (length[0] << 8) | (length[1]);
 	if(len > pow(2,14)){
 		printf("too much record!\n");
 		return 1;
 	}
+
+	printf("length of READING record %d\n",len);
 
 	unsigned char *buffer = malloc(len);
 
@@ -117,13 +120,20 @@ int get_record_socket(unsigned char *outPtr, unsigned long long *out_len, int fd
 
 	unsigned char ad[] = {type, legacy_version[0], legacy_version[1], length[0], length[1]};
 
-	outPtr = malloc(len);
+	*outPtr = malloc(len);
+	if(*outPtr == NULL){
+		printf("MALLOC failed at getting record socket\n");
+	}
 
-	int decryption = crypto_aead_chacha20poly1305_ietf_decrypt(outPtr, out_len,
+	int decryption = crypto_aead_chacha20poly1305_ietf_decrypt(*outPtr, out_len,
 									NULL,
 									buffer, len,
 									ad, sizeof(ad),
 									nouce, k);
+
+	if(*outPtr == NULL){
+		printf("decrypting corrupted the PTR!\n");
+	}
 
 		
 	free(buffer);
