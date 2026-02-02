@@ -652,7 +652,7 @@ int main(){
 	}
 	//dump_socket(acc);
 
-	sleep(1);
+	sleep(0);
 	//Certificate
 	if(1){
 		record.length = 0;
@@ -663,7 +663,7 @@ int main(){
 		uint32_t cert_data_length = 0;
 		//read cert.der file for binary encoding
 		FILE *filePtr;
-		filePtr = fopen("cert.der","r");
+		filePtr = fopen("cert2.der","r");
 		
 		fseek(filePtr, 0, SEEK_END);
 		 cert_data_length = ftell(filePtr);
@@ -761,8 +761,8 @@ int main(){
 	}
 	//dump_socket(acc);
 	
-	sleep(1);
-	if(1){
+	sleep(0);
+	if(0){
 		unsigned char *mes = NULL;
 		unsigned long long mes_length;
 
@@ -795,7 +795,7 @@ int main(){
 		printf("crypto_sign_SEEDBYTES: %d\n",crypto_sign_SEEDBYTES);
 		
 		FILE *filePtr;
-		filePtr = fopen("key.hex", "r");
+		filePtr = fopen("key2.hex", "r");
 
 		unsigned char secret_seed_hex[64];
 		fread(secret_seed_hex, 364, 1, filePtr);
@@ -808,7 +808,7 @@ int main(){
 				NULL, NULL, NULL);
 
 		printArrayHex("secret_seed",secret_seed,32);
-
+		/*
 		unsigned char sign_public_key[crypto_sign_PUBLICKEYBYTES];
 		unsigned char sign_secret_key[crypto_sign_SECRETKEYBYTES];
 
@@ -816,7 +816,7 @@ int main(){
 
 		printArrayHex("sign_public_key", sign_public_key, crypto_sign_PUBLICKEYBYTES);
 		printArrayHex("sign_secret_key", sign_secret_key, crypto_sign_SECRETKEYBYTES);
-
+		*/
 		unsigned char to_sign[64 + 33 + 1 + 32];//0x20 64 times + contex string + 0 bytes seperator + content to be signed transcipt hash
 		unsigned char *iter = to_sign;
 
@@ -838,15 +838,99 @@ int main(){
 		getHash(&tHash, transcipt_hash);
 		memcpy(iter, transcipt_hash, 32);
 		iter += 32;
+	
+	
+		//unsigned long long siglen;
+		//unsigned char sig[crypto_sign_BYTES];
+		
+		uECC_Curve curve;
+		curve = uECC_secp256r1();
 
-		unsigned long long siglen;
-		unsigned char sig[crypto_sign_BYTES];
+		unsigned char compress_to_sign[32];
+		crypto_hash_sha256(compress_to_sign, to_sign, sizeof(to_sign));
 
-		crypto_sign_detached(sig, &siglen,
-					to_sign, sizeof(to_sign),
-					sign_secret_key);
+		uint8_t signing_key[32];
 
-		unsigned char fragment[4 + 2 + 2 + crypto_sign_BYTES + 1];
+		memcpy(signing_key, secret_seed, 32);
+
+		uint8_t sig[64];
+
+		int rc = uECC_sign(signing_key,
+					compress_to_sign, 32,
+					sig,
+					curve);
+
+		printf("SINGING rc %d\n",rc);
+
+		unsigned char r[32];
+		unsigned char s[32];
+		
+		iter = sig;
+		
+		memcpy(r, iter, 32);
+		iter += 32;
+		
+		memcpy(s, iter, 32);
+		iter += 32;
+
+		printArrayHex("r",r,32);
+		printArrayHex("s",s,32);
+
+		uint8_t asn_len = 2 + 2 + 32 + 2 + 32;
+		uint8_t wr_len = 32;
+		uint8_t ws_len = 32;
+
+		if(r[0] >= 0x80){
+			asn_len += 1;
+			wr_len += 1;
+		}
+		if(s[0] >= 0x80){
+			asn_len += 1;
+			ws_len += 1;
+		}
+
+		unsigned char asn[asn_len];
+		unsigned char wr[wr_len+2];
+		unsigned char ws[ws_len+2];
+
+		iter = wr;
+
+		*iter = 0x02; iter++;
+	       	*iter = wr_len; iter++;
+
+		if(r[0]>=0x80){*iter=0x00;iter++;}
+
+		memcpy(iter,r,sizeof(r));
+
+
+		iter = ws;
+		
+		*iter = 0x02; iter++;
+		*iter = ws_len; iter++;
+
+		if(s[0]>=0x80){*iter=0x00;iter++;}
+
+		memcpy(iter, s,sizeof(s));
+
+
+		iter = asn;
+
+		*iter = 0x30; iter++;
+		*iter = asn_len-2; iter++;
+
+		memcpy(iter, wr,sizeof(wr));
+		iter += sizeof(wr);
+
+		memcpy(iter, ws,sizeof(ws));
+
+		printArrayHex("ASN",asn,sizeof(asn));
+
+
+		//crypto_sign_detached(sig, &siglen,
+		//			to_sign, sizeof(to_sign),
+		//			sign_secret_key);
+
+		unsigned char fragment[4 + 2 + 2 + sizeof(asn) + 1];
 		iter = fragment;
 
 		*iter = 15; iter += 1;
@@ -856,16 +940,16 @@ int main(){
 		memcpy(iter, len24, 3);
 		iter += 3;
 		
-		*iter = 0x08; iter += 1;
-		*iter = 0x07; iter += 1;
+		*iter = 0x04; iter += 1;
+		*iter = 0x03; iter += 1;
 
 		unsigned char len16[2];
-		getUint16Arr(len16, crypto_sign_BYTES);
+		getUint16Arr(len16, sizeof(asn));
 		memcpy(iter, len16, 2);
 		iter += 2;
 
-		memcpy(iter, sig, crypto_sign_BYTES);
-		iter += crypto_sign_BYTES;
+		memcpy(iter, asn, sizeof(asn));
+		iter += sizeof(asn);
 
 		*iter = 22;
 		iter += 1;
